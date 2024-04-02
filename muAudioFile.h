@@ -9,6 +9,11 @@ More explicit license information at the end of file.
 @MENTION mu_audio_file_get_format can guess based on inner file content signatures. Also, signature
 checks will not be performed on excluded file formats, but extension checks will.
 @MENTION MUAF_READ_CALL_FAILED is called for unexpected EOF usually.
+@MENTION MU_AUDIO_DATA_UNKNOWN is valid to have as the 'data_type' member for muAudioFileInfo, as
+it indicates that the data used for each chunk can differ.
+@MENTION MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT
+
+@TODO Add more upfront info to muAudioFileInfo.
 */
 
 /* muu header commit 96a78ce */
@@ -332,6 +337,16 @@ checks will not be performed on excluded file formats, but extension checks will
 
 		#endif
 
+		#if !defined(mu_floor)
+
+			#include <math.h>
+
+			#ifndef mu_floor
+				#define mu_floor floor
+			#endif
+
+		#endif
+
 	/* Macros */
 
 		#define muAudioFileCompressionLevel size_m
@@ -468,6 +483,16 @@ checks will not be performed on excluded file formats, but extension checks will
 			return (b[0] << 24) + (b[1] << 16) + (b[2] << 8) + b[3];
 		}
 
+		size_m muaf_get_byte_size_of_audio_data_type(muAudioDataType data_type) {
+			switch (data_type) {
+				default: case MU_AUDIO_DATA_UINT8: return 1; break;
+				case MU_AUDIO_DATA_INT16: return 2; break;
+				case MU_AUDIO_DATA_INT24: return 3; break;
+				case MU_AUDIO_DATA_INT32: case MU_AUDIO_DATA_FLOAT32: return 4; break;
+				case MU_AUDIO_DATA_INT64: case MU_AUDIO_DATA_FLOAT64: return 8; break;
+			}
+		}
+
 	/* WAV */
 	#ifndef MUAF_NO_WAV
 
@@ -490,6 +515,11 @@ checks will not be performed on excluded file formats, but extension checks will
 		// https://isip.piconepress.com/projects/speech/software/tutorials/production/fundamentals/v1.0/section_02/s02_01_p05.html
 		// http://soundfile.sapp.org/doc/WaveFormat/
 		// https://www.recordingblogs.com/wiki/fact-chunk-of-a-wave-file
+
+		// "MAX" because chunks sometimes need to be cut short
+		#ifndef MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT
+			#define MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT 128
+		#endif
 
 		/* Useful functions */
 
@@ -759,7 +789,11 @@ checks will not be performed on excluded file formats, but extension checks will
 
 				// Chunk count
 
-				info.chunk_count = 1;
+				info.chunk_count = (size_m)mu_floor(
+					(double)(Subchunk2Size / (NumChannels * (BitsPerSample/8))) // Amount of samples
+					/
+					(double)(MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT) // Per-chunk sample count
+				) + 1;
 
 				if (pinfo != 0) {
 					pinfo->file = file;
@@ -772,24 +806,28 @@ checks will not be performed on excluded file formats, but extension checks will
 			}
 
 			muAudioChunk muaf_wav_audio_file_read_chunk(muafResult* result, const char* filename, size_m chunk_index) {
-				MU_ASSERT(chunk_index == 0, result, MUAF_INVALID_CHUNK_INDEX, return MU_ZERO_STRUCT(muAudioChunk);)
-
 				muafResult res = MUAF_SUCCESS;
 				muaf_wav_info winfo = MU_ZERO_STRUCT(muaf_wav_info);
 
 				muAudioFileInfo info = muaf_wav_audio_file_get_info(&res, filename, &winfo);
 				MU_ASSERT(res == MUAF_SUCCESS, result, res, return MU_ZERO_STRUCT(muAudioChunk);)
+				MU_ASSERT(chunk_index < info.chunk_count, result, MUAF_INVALID_CHUNK_INDEX, mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
 
 				muAudioChunk chunk = MU_ZERO_STRUCT(muAudioChunk);
 				chunk.data_type = info.data_type;
 				chunk.channel_interleaving = MU_CHANNEL_CONSECUTIVE;
 
-				chunk.data = (muByte*)mu_malloc(winfo.sample_size);
-				MU_ASSERT(chunk.data != 0, result, MUAF_ALLOCATION_FAILED, mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
-				chunk.data_size = winfo.sample_size;
+				size_m individual_chunk_size = MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT * info.channel_count * muaf_get_byte_size_of_audio_data_type(chunk.data_type);
+				chunk.data_size = individual_chunk_size;
+				if (chunk_index + 1 >= info.chunk_count) {
+					chunk.data_size = (winfo.sample_size % MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT) * info.channel_count * muaf_get_byte_size_of_audio_data_type(chunk.data_type);
+				}
 
-				MU_ASSERT(mu_fseek(winfo.file, winfo.data_index, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_free(chunk.data); mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
-				MU_ASSERT(mu_fread(chunk.data, winfo.sample_size, 1, winfo.file) == 1, result, MUAF_READ_CALL_FAILED, mu_free(chunk.data); mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
+				chunk.data = (muByte*)mu_malloc(chunk.data_size);
+				MU_ASSERT(chunk.data != 0, result, MUAF_ALLOCATION_FAILED, mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
+
+				MU_ASSERT(mu_fseek(winfo.file, winfo.data_index + (chunk_index * individual_chunk_size), SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_free(chunk.data); mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
+				MU_ASSERT(mu_fread(chunk.data, chunk.data_size, 1, winfo.file) == 1, result, MUAF_READ_CALL_FAILED, mu_free(chunk.data); mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
 
 				mu_fclose(winfo.file);
 				return chunk;
