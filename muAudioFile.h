@@ -5,6 +5,10 @@ No warranty implied; use at your own risk.
 
 Licensed under MIT License or public domain, whichever you prefer.
 More explicit license information at the end of file.
+
+@MENTION mu_audio_file_get_format can guess based on inner file content signatures. Also, signature
+checks will not be performed on excluded file formats, but extension checks will.
+@MENTION MUAF_READ_CALL_FAILED is called for unexpected EOF usually.
 */
 
 /* muu header commit 96a78ce */
@@ -263,12 +267,17 @@ More explicit license information at the end of file.
 
 	/* C standard library dependencies */
 
-		#if !defined(mu_memcpy)
+		#if !defined(mu_memcpy) || \
+			!defined(mu_strlen)
 
 			#include <string.h>
 
 			#ifndef mu_memcpy
 				#define mu_memcpy memcpy
+			#endif
+
+			#ifndef mu_strlen
+				#define mu_strlen strlen
 			#endif
 
 		#endif
@@ -322,7 +331,7 @@ More explicit license information at the end of file.
 
 			MUAF_ALLOCATION_FAILED,
 			MUAF_FAILED_TO_OPEN_FILE,
-			MUAF_READ_CALL_FAILED, // Mention that also commonly called for unexpected EOF
+			MUAF_READ_CALL_FAILED,
 
 			MUAF_INVALID_DATA_SIZE,
 			MUAF_INVALID_SIGNATURE,
@@ -398,6 +407,7 @@ More explicit license information at the end of file.
 
 		/* Audio file read */
 
+			MUDEF muAudioFileFormat mu_audio_file_get_format(muafResult* result, const char* filename);
 			MUDEF muAudioFileInfo mu_audio_file_get_info(muafResult* result, const char* filename);
 
 			MUDEF muAudioChunk mu_audio_file_read_chunk(muafResult* result, const char* filename, size_m chunk_index);
@@ -464,10 +474,19 @@ More explicit license information at the end of file.
 		// http://soundfile.sapp.org/doc/WaveFormat/
 		// https://www.recordingblogs.com/wiki/fact-chunk-of-a-wave-file
 
+		/* Useful functions */
+
+			muBool muaf_wav_signature_check(muByte* bytes, size_m bytelen) {
+				if (bytelen < 4) {
+					return MU_FALSE;
+				}
+				return bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46;
+			}
+
 		/* Pre-API level functions */
 
 			struct muaf_wav_info {
-				FILE* file;
+				FILE_M* file;
 				size_m sample_size;
 				size_m data_index;
 			};
@@ -759,9 +778,93 @@ More explicit license information at the end of file.
 				return MU_ZERO_STRUCT(muAudioChunk);
 			}
 
-	#endif
+	#endif /* MUAF_NO_WAV */
 
-	/* Functions */
+	/* Useful functions */
+
+		size_m muaf_next_sig(const char* s, size_m i) {
+			i += 1;
+			while (s[i] == ' '  || s[i] == '\t' || s[i] == '\n') {
+				if (s[i] == '\0') {
+					return MU_NONE;
+				}
+				i += 1;
+			}
+			if (s[i] == '\0') {
+				return MU_NONE;
+			}
+			return i;
+		}
+
+		size_m muaf_next_sigi(const char* s, size_m i, size_m count) {
+			for (size_m j = 0; j < count; j++) {
+				i = muaf_next_sig(s, i);
+			}
+			return i;
+		}
+
+		muAudioFileFormat muaf_get_audio_file_format_from_filename(const char* filename) {
+			size_m len = mu_strlen(filename);
+			size_m period_index = MU_NONE;
+
+			size_m i;
+			for (i = len-1; i != 0; i -= 1) {
+				if (filename[i] == '.') {
+					period_index = i;
+					break;
+				}
+			}
+			if (i == 0) {
+				if (filename[0] == '.') {
+					period_index = 0;
+				} else {
+					return MU_AUDIO_FILE_UNKNOWN;
+				}
+			}
+
+			size_m file_extension_literal_length = muaf_next_sig(filename, period_index);
+			size_m file_extension_length = 0;
+			while (file_extension_literal_length != MU_NONE) {
+				file_extension_literal_length = muaf_next_sig(filename, file_extension_literal_length);
+				file_extension_length += 1;
+			}
+
+			switch (file_extension_length) {
+				default: return MU_AUDIO_FILE_UNKNOWN; break;
+				case 3: {
+					if (filename[muaf_next_sigi(filename, period_index, 1)] == 'w' &&
+						filename[muaf_next_sigi(filename, period_index, 2)] == 'a' &&
+						filename[muaf_next_sigi(filename, period_index, 3)] == 'v'
+					) {
+						return MU_AUDIO_FILE_WAV;
+					}
+				} break;
+				case 4: {
+					if (filename[muaf_next_sigi(filename, period_index, 1)] == 'w' &&
+						filename[muaf_next_sigi(filename, period_index, 2)] == 'a' &&
+						filename[muaf_next_sigi(filename, period_index, 3)] == 'v' &&
+						filename[muaf_next_sigi(filename, period_index, 4)] == 'e'
+					) {
+						return MU_AUDIO_FILE_WAV;
+					}
+				} break;
+			}
+
+			return MU_AUDIO_FILE_UNKNOWN;
+		}
+
+		// Minimum currently is 4
+		muAudioFileFormat muaf_get_audio_file_format_from_file(muByte* first_bytes, size_m len) { if (first_bytes) {} if (len) {}
+			#ifndef MUAF_NO_WAV
+				if (muaf_wav_signature_check(first_bytes, len) == MU_TRUE) {
+					return MU_AUDIO_FILE_WAV;
+				}
+			#endif
+
+			return MU_AUDIO_FILE_UNKNOWN;
+		}
+
+	/* API-level functions */
 
 		/* Names */
 
@@ -792,6 +895,39 @@ More explicit license information at the end of file.
 					}
 				}
 			#endif
+
+		/* Audio file read */
+
+			MUDEF muAudioFileFormat mu_audio_file_get_format(muafResult* result, const char* filename) {
+				MU_SET_RESULT(result, MUAF_SUCCESS)
+
+				muAudioFileFormat format = muaf_get_audio_file_format_from_filename(filename);
+				if (format != MU_AUDIO_FILE_UNKNOWN) {
+					return format;
+				}
+
+				FILE_M* file = mu_fopen(filename, "rb");
+				MU_ASSERT(file != 0, result, MUAF_FAILED_TO_OPEN_FILE, return MU_AUDIO_FILE_UNKNOWN;)
+
+				MU_ASSERT(mu_fseek(file, 0, SEEK_END) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return MU_AUDIO_FILE_UNKNOWN;)
+				size_m filelen = mu_ftell(file);
+				MU_ASSERT(mu_fseek(file, 0, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return MU_AUDIO_FILE_UNKNOWN;)
+
+				MU_ASSERT(filelen >= 4, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return MU_AUDIO_FILE_UNKNOWN;)
+				muByte first_four[4];
+				MU_ASSERT(mu_fread(first_four, 4, 1, file) == 1, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return MU_AUDIO_FILE_UNKNOWN;)
+
+				mu_fclose(file);
+				format = muaf_get_audio_file_format_from_file(first_four, 4);
+				return format;
+			}
+
+			/*MUDEF muAudioFileInfo mu_audio_file_get_info(muafResult* result, const char* filename) {
+
+			}*/
+
+			//MUDEF muAudioChunk mu_audio_file_read_chunk(muafResult* result, const char* filename, size_m chunk_index);
+			//MUDEF muAudioChunk mu_audio_file_free_chunk(muafResult* result, muAudioChunk chunk);
 
 	#ifdef __cplusplus
 	}
