@@ -317,6 +317,21 @@ checks will not be performed on excluded file formats, but extension checks will
 
 		#endif
 
+		#if !defined(mu_malloc) || \
+			!defined(mu_free)
+
+			#include <stdlib.h>
+
+			#ifndef mu_malloc
+				#define mu_malloc malloc
+			#endif
+
+			#ifndef mu_free
+				#define mu_free free
+			#endif
+
+		#endif
+
 	/* Macros */
 
 		#define muAudioFileCompressionLevel size_m
@@ -777,7 +792,7 @@ checks will not be performed on excluded file formats, but extension checks will
 				MU_ASSERT(mu_fread(chunk.data, winfo.sample_size, 1, winfo.file) == 1, result, MUAF_READ_CALL_FAILED, mu_free(chunk.data); mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
 
 				mu_fclose(winfo.file);
-				return MU_ZERO_STRUCT(muAudioChunk);
+				return chunk;
 			}
 
 	#endif /* MUAF_NO_WAV */
@@ -939,8 +954,29 @@ checks will not be performed on excluded file formats, but extension checks will
 				}
 			}
 
-			//MUDEF muAudioChunk mu_audio_file_read_chunk(muafResult* result, const char* filename, size_m chunk_index);
-			//MUDEF muAudioChunk mu_audio_file_free_chunk(muafResult* result, muAudioChunk chunk);
+			MUDEF muAudioChunk mu_audio_file_read_chunk(muafResult* result, const char* filename, size_m chunk_index) {
+				MU_SET_RESULT(result, MUAF_SUCCESS)
+
+				muAudioFileFormat format = mu_audio_file_get_format(result, filename);
+
+				switch (format) {
+					default: MU_SET_RESULT(result, MUAF_UNKNOWN_AUDIO_FILE_FORMAT) return MU_ZERO_STRUCT(muAudioChunk); break;
+
+					#ifndef MUAF_NO_WAV
+						case MU_AUDIO_FILE_WAV: { return muaf_wav_audio_file_read_chunk(result, filename, chunk_index); } break;
+					#endif
+				}
+			}
+
+			MUDEF muAudioChunk mu_audio_file_free_chunk(muafResult* result, muAudioChunk chunk) {
+				MU_SET_RESULT(result, MUAF_SUCCESS)
+
+				if (chunk.data != 0) {
+					mu_free(chunk.data);
+				}
+
+				return MU_ZERO_STRUCT(muAudioChunk);
+			}
 
 	#ifdef __cplusplus
 	}
