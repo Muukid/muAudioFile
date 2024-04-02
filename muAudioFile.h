@@ -337,6 +337,8 @@ checks will not be performed on excluded file formats, but extension checks will
 			MUAF_INVALID_SIGNATURE,
 			MUAF_INVALID_CHUNK_INDEX,
 
+			MUAF_UNKNOWN_AUDIO_FILE_FORMAT,
+
 			MUAF_WAV_INVALID_RIFF_HEADER_CHUNK_SIZE,
 			MUAF_WAV_INVALID_RIFF_HEADER_FORMAT,
 			MUAF_WAV_INVALID_FMT_SUBCHUNK_SUBCHUNK1ID,
@@ -879,6 +881,7 @@ checks will not be performed on excluded file formats, but extension checks will
 						case MUAF_INVALID_DATA_SIZE: return "MUAF_INVALID_DATA_SIZE"; break;
 						case MUAF_INVALID_SIGNATURE: return "MUAF_INVALID_SIGNATURE"; break;
 						case MUAF_INVALID_CHUNK_INDEX: return "MUAF_INVALID_CHUNK_INDEX"; break;
+						case MUAF_UNKNOWN_AUDIO_FILE_FORMAT: return "MUAF_UNKNOWN_AUDIO_FILE_FORMAT"; break;
 						case MUAF_WAV_INVALID_RIFF_HEADER_CHUNK_SIZE: return "MUAF_WAV_INVALID_RIFF_HEADER_CHUNK_SIZE"; break;
 						case MUAF_WAV_INVALID_RIFF_HEADER_FORMAT: return "MUAF_WAV_INVALID_RIFF_HEADER_FORMAT"; break;
 						case MUAF_WAV_INVALID_FMT_SUBCHUNK_SUBCHUNK1ID: return "MUAF_WAV_INVALID_FMT_SUBCHUNK_SUBCHUNK1ID"; break;
@@ -922,9 +925,19 @@ checks will not be performed on excluded file formats, but extension checks will
 				return format;
 			}
 
-			/*MUDEF muAudioFileInfo mu_audio_file_get_info(muafResult* result, const char* filename) {
+			MUDEF muAudioFileInfo mu_audio_file_get_info(muafResult* result, const char* filename) {
+				MU_SET_RESULT(result, MUAF_SUCCESS)
 
-			}*/
+				muAudioFileFormat format = mu_audio_file_get_format(result, filename);
+
+				switch (format) {
+					default: MU_SET_RESULT(result, MUAF_UNKNOWN_AUDIO_FILE_FORMAT) return MU_ZERO_STRUCT(muAudioFileInfo); break;
+
+					#ifndef MUAF_NO_WAV
+						case MU_AUDIO_FILE_WAV: { return muaf_wav_audio_file_get_info(result, filename, 0); } break;
+					#endif
+				}
+			}
 
 			//MUDEF muAudioChunk mu_audio_file_read_chunk(muafResult* result, const char* filename, size_m chunk_index);
 			//MUDEF muAudioChunk mu_audio_file_free_chunk(muafResult* result, muAudioChunk chunk);
