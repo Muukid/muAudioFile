@@ -326,6 +326,7 @@ More explicit license information at the end of file.
 
 			MUAF_INVALID_DATA_SIZE,
 			MUAF_INVALID_SIGNATURE,
+			MUAF_INVALID_CHUNK_INDEX,
 
 			MUAF_WAV_INVALID_RIFF_HEADER_CHUNK_SIZE,
 			MUAF_WAV_INVALID_RIFF_HEADER_FORMAT,
@@ -385,7 +386,7 @@ More explicit license information at the end of file.
 			muAudioDataType data_type;
 			muAudioChannelInterleaving channel_interleaving;
 			muByte* data;
-			size_m sample_length;
+			size_m data_size;
 		};
 		typedef struct muAudioChunk muAudioChunk;
 
@@ -453,7 +454,7 @@ More explicit license information at the end of file.
 		// expand format support later.
 		// * As of right now, this parser is unable to read wav files with multiple subchunks.
 		// * As of right now, wav files are one big chunk. This is not THAT bad, as the maximum 
-		// size of a wav is ~ 4 GiB, but it would be nice to add later. @TODO
+		// size of a wav is ~4 GiB, but it would be nice to add later. @TODO
 
 		/*  - References - */
 
@@ -465,7 +466,14 @@ More explicit license information at the end of file.
 
 		/* Pre-API level functions */
 
-			muAudioFileInfo muaf_wav_audio_file_get_info(muafResult* result, const char* filename) {
+			struct muaf_wav_info {
+				FILE* file;
+				size_m sample_size;
+				size_m data_index;
+			};
+			typedef struct muaf_wav_info muaf_wav_info;
+
+			muAudioFileInfo muaf_wav_audio_file_get_info(muafResult* result, const char* filename, muaf_wav_info* pinfo) {
 				FILE_M* file = mu_fopen(filename, "rb");
 				MU_ASSERT(file != 0, result, MUAF_FAILED_TO_OPEN_FILE, return MU_ZERO_STRUCT(muAudioFileInfo);)
 
@@ -672,8 +680,6 @@ More explicit license information at the end of file.
 						,result, MUAF_WAV_MISSING_DATA_SUBCHUNK_PADDING, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);
 					)
 
-				mu_fclose(file);
-
 				muAudioFileInfo info = MU_ZERO_STRUCT(muAudioFileInfo);
 
 				// Format
@@ -719,7 +725,38 @@ More explicit license information at the end of file.
 
 				info.chunk_count = 1;
 
+				if (pinfo != 0) {
+					pinfo->file = file;
+					pinfo->sample_size = Subchunk2Size;
+					pinfo->data_index = data_beg;
+				} else {
+					mu_fclose(file);
+				}
 				return info;
+			}
+
+			muAudioChunk muaf_wav_audio_file_read_chunk(muafResult* result, const char* filename, size_m chunk_index) {
+				MU_ASSERT(chunk_index == 0, result, MUAF_INVALID_CHUNK_INDEX, return MU_ZERO_STRUCT(muAudioChunk);)
+
+				muafResult res = MUAF_SUCCESS;
+				muaf_wav_info winfo = MU_ZERO_STRUCT(muaf_wav_info);
+
+				muAudioFileInfo info = muaf_wav_audio_file_get_info(&res, filename, &winfo);
+				MU_ASSERT(res == MUAF_SUCCESS, result, res, return MU_ZERO_STRUCT(muAudioChunk);)
+
+				muAudioChunk chunk = MU_ZERO_STRUCT(muAudioChunk);
+				chunk.data_type = info.data_type;
+				chunk.channel_interleaving = MU_CHANNEL_CONSECUTIVE;
+
+				chunk.data = (muByte*)mu_malloc(winfo.sample_size);
+				MU_ASSERT(chunk.data != 0, result, MUAF_ALLOCATION_FAILED, mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
+				chunk.data_size = winfo.sample_size;
+
+				MU_ASSERT(mu_fseek(winfo.file, winfo.data_index, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_free(chunk.data); mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
+				MU_ASSERT(mu_fread(chunk.data, winfo.sample_size, 1, winfo.file) == 1, result, MUAF_READ_CALL_FAILED, mu_free(chunk.data); mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
+
+				mu_fclose(winfo.file);
+				return MU_ZERO_STRUCT(muAudioChunk);
 			}
 
 	#endif
@@ -738,6 +775,7 @@ More explicit license information at the end of file.
 						case MUAF_FAILED_TO_OPEN_FILE: return "MUAF_FAILED_TO_OPEN_FILE"; break;
 						case MUAF_INVALID_DATA_SIZE: return "MUAF_INVALID_DATA_SIZE"; break;
 						case MUAF_INVALID_SIGNATURE: return "MUAF_INVALID_SIGNATURE"; break;
+						case MUAF_INVALID_CHUNK_INDEX: return "MUAF_INVALID_CHUNK_INDEX"; break;
 						case MUAF_WAV_INVALID_RIFF_HEADER_CHUNK_SIZE: return "MUAF_WAV_INVALID_RIFF_HEADER_CHUNK_SIZE"; break;
 						case MUAF_WAV_INVALID_RIFF_HEADER_FORMAT: return "MUAF_WAV_INVALID_RIFF_HEADER_FORMAT"; break;
 						case MUAF_WAV_INVALID_FMT_SUBCHUNK_SUBCHUNK1ID: return "MUAF_WAV_INVALID_FMT_SUBCHUNK_SUBCHUNK1ID"; break;
