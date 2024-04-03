@@ -13,8 +13,11 @@ checks will not be performed on excluded file formats, but extension checks will
 it indicates that the data used for each chunk can differ.
 @MENTION MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT
 @MENTION Pretty please do not change the contents of the muAudioFileInfo struct over multiple
-function calls. Pretty please.
+function calls. Pretty please. Especially over chunk writing functions.
 @MENTION 'mu_audio_chunk_write_init' wipes contents.
+@MENTION 'mu_audio_chunk_write_add_chunk' can be called indefinitely without regard for initial
+chunk count, BUT ONLY the last chunk should be less than the max chunk count; disregarding such
+leads to undefined behavior per audio file format.
 
 @TODO Add more upfront info to muAudioFileInfo.
 @TODO Separate byte manipulation library.
@@ -384,6 +387,12 @@ function calls. Pretty please.
 			MUAF_INVALID_CHUNK_INDEX,
 			MUAF_INVALID_CHANNEL_COUNT,
 			MUAF_INVALID_SAMPLE_RATE,
+			MUAF_INVALID_CHUNK_SIZE,
+
+			MUAF_MISMATCH_DATA_TYPE,
+			MUAF_MISMATCH_CHANNEL_INTERLEAVING,
+
+			MUAF_OVERFLOW_CHUNK,
 
 			MUAF_UNKNOWN_AUDIO_FILE_FORMAT,
 
@@ -467,8 +476,8 @@ function calls. Pretty please.
 		/* Write */
 
 			MUDEF void mu_audio_chunk_write_init(muafResult* result, const char* filename, muAudioFileInfo info);
-			MUDEF void mu_audio_chunk_write_add_chunk(muafResult* result, const char* filename, muAudioChunk audio_chunk);
-			MUDEF void mu_audio_chunk_write_term(muafResult* result, const char* filename);
+			MUDEF void mu_audio_chunk_write_add_chunk(muafResult* result, const char* filename, muAudioFileInfo info, muAudioChunk audio_chunk);
+			MUDEF void mu_audio_chunk_write_term(muafResult* result, const char* filename, muAudioFileInfo info);
 
 		/* Conversion */
 
@@ -577,7 +586,11 @@ function calls. Pretty please.
 
 		/* - TODOs - */
 
-		// @TODO Add cue, playlist, and associated data list chunk handling.
+		// @TODO Add cue, playlist, and associated data list chunk handling. This would most likely
+		// necessitate an abstracted way to read the subchunks of a wav file and find your way
+		// through it then. The reason I'm not doing it right now despite just how much rewriting
+		// of the code below it would take AND just how much better this wav parser would be for it
+		// is because I'm currently doing this repo on a time crunch. Just how it is.
 
 		/*  - References - */
 
@@ -590,7 +603,7 @@ function calls. Pretty please.
 
 		// "MAX" because chunks sometimes need to be cut short
 		#ifndef MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT
-			#define MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT 128
+			#define MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT 4096
 		#endif
 
 		/* Useful functions */
@@ -611,7 +624,7 @@ function calls. Pretty please.
 			};
 			typedef struct muaf_wav_info muaf_wav_info;
 
-			muAudioFileInfo muaf_wav_audio_file_get_info(muafResult* result, const char* filename, muaf_wav_info* pinfo) {
+			muAudioFileInfo muaf_wav_audio_file_get_info(muafResult* result, const char* filename, muaf_wav_info* pinfo, muBool verify_data) {
 				FILE_M* file = mu_fopen(filename, "rb");
 				MU_ASSERT(file != 0, result, MUAF_FAILED_TO_OPEN_FILE, return MU_ZERO_STRUCT(muAudioFileInfo);)
 
@@ -637,9 +650,11 @@ function calls. Pretty please.
 
 					// ChunkSize
 
-					MU_ASSERT(muaf_leuint32(&riff_header[4]) == (filelen-8)
-						,result, MUAF_WAV_INVALID_RIFF_HEADER_CHUNK_SIZE, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);
-					)
+					if (verify_data) {
+						MU_ASSERT(muaf_leuint32(&riff_header[4]) == (filelen-8)
+							,result, MUAF_WAV_INVALID_RIFF_HEADER_CHUNK_SIZE, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);
+						)
+					}
 
 					// Format
 
@@ -773,27 +788,34 @@ function calls. Pretty please.
 					MU_ASSERT(mu_fread(Subchunk2SizeB, 4, 1, file) == 1, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);)
 					offset += 4;
 					MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);)
+
 					uint32_m Subchunk2Size = muaf_leuint32(Subchunk2SizeB);
-					MU_ASSERT(Subchunk2Size % (NumChannels * (BitsPerSample/8)) == 0
-						,result, MUAF_WAV_INVALID_DATA_SUBCHUNK_SUBCHUNK2SIZE, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);
-					)
+					if (verify_data) {
+						MU_ASSERT(Subchunk2Size % (NumChannels * (BitsPerSample/8)) == 0
+							,result, MUAF_WAV_INVALID_DATA_SUBCHUNK_SUBCHUNK2SIZE, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);
+						)
+					}
 
 					// NumSamples (Not actually part of subchunk)
 
 					uint32_m NumSamples = Subchunk2Size / (NumChannels * (BitsPerSample/8));
-					MU_ASSERT(NumSamples != 0
-						,result, MUAF_WAV_INVALID_DATA_SUBCHUNK_SUBCHUNK2SIZE, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);
-					)
+					if (verify_data) {
+						MU_ASSERT(NumSamples != 0
+							,result, MUAF_WAV_INVALID_DATA_SUBCHUNK_SUBCHUNK2SIZE, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);
+						)
+					}
 
 					// Data
 
 					size_m data_beg = mu_ftell(file);
-					MU_ASSERT(mu_fseek(file, 0, SEEK_END) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);)
-					size_m data_end = mu_ftell(file);
-					size_m data_size = data_end - data_beg;
-					MU_ASSERT((data_size % 2 == 0) && (mu_ftell(file) % 2 == 0)
-						,result, MUAF_WAV_MISSING_DATA_SUBCHUNK_PADDING, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);
-					)
+					if (verify_data) {
+						MU_ASSERT(mu_fseek(file, 0, SEEK_END) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);)
+						size_m data_end = mu_ftell(file);
+						size_m data_size = data_end - data_beg;
+						MU_ASSERT((data_size % 2 == 0) && (mu_ftell(file) % 2 == 0)
+							,result, MUAF_WAV_MISSING_DATA_SUBCHUNK_PADDING, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);
+						)
+					}
 
 				muAudioFileInfo info = MU_ZERO_STRUCT(muAudioFileInfo);
 
@@ -864,7 +886,7 @@ function calls. Pretty please.
 				muafResult res = MUAF_SUCCESS;
 				muaf_wav_info winfo = MU_ZERO_STRUCT(muaf_wav_info);
 
-				muAudioFileInfo info = muaf_wav_audio_file_get_info(&res, filename, &winfo);
+				muAudioFileInfo info = muaf_wav_audio_file_get_info(&res, filename, &winfo, MU_TRUE);
 				MU_ASSERT(res == MUAF_SUCCESS, result, res, return MU_ZERO_STRUCT(muAudioChunk);)
 				MU_ASSERT((chunk_index + chunk_length) <= info.chunk_count, result, MUAF_INVALID_CHUNK_INDEX, mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
 
@@ -876,25 +898,23 @@ function calls. Pretty please.
 				chunk.data_size = individual_chunk_size * chunk_length;
 				if ((chunk_index + chunk_length) == info.chunk_count) {
 					chunk.data_size -= individual_chunk_size;
-					chunk.data_size += (winfo.sample_size % MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT) * info.channel_count * muaf_get_byte_size_of_audio_data_type(chunk.data_type);
+					chunk.data_size += (winfo.sample_size) - ((info.chunk_count-1) * individual_chunk_size);
 				}
 				chunk.data = data;
 
-				MU_ASSERT(mu_fseek(winfo.file, winfo.data_index + (chunk_index * individual_chunk_size), SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_free(chunk.data); mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
-				MU_ASSERT(mu_fread(chunk.data, chunk.data_size, 1, winfo.file) == 1, result, MUAF_READ_CALL_FAILED, mu_free(chunk.data); mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
+				MU_ASSERT(mu_fseek(winfo.file, winfo.data_index + (chunk_index * individual_chunk_size), SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
+				MU_ASSERT(mu_fread(chunk.data, chunk.data_size, 1, winfo.file) == 1, result, MUAF_READ_CALL_FAILED, mu_fclose(winfo.file); return MU_ZERO_STRUCT(muAudioChunk);)
 
 				mu_fclose(winfo.file);
 				return chunk;
 			}
 
-			// Philosophy of init/add/term for wav:
+			// Philosophy of init/add for wav:
 			// * Initiation sets up the beginning headers of the wav file with no data, leaving the
 			// fields ChunkSize, FactSampleLength, and Subchunk2Size empty, as they all depend on 
 			// the amount of samples, something that isn't entirely known yet.
 			// * Chunk addition adds a chunk to the wav file, incrementing the previously unknown
 			// fields.
-			// * Termination performs a final check on these fields, making sure that they add up,
-			// and correcting them if they don't.
 
 			void muaf_wav_audio_chunk_write_init(muafResult* result, const char* filename, muAudioFileInfo info) {
 				MU_ASSERT(info.channel_count >= 1, result, MUAF_INVALID_CHANNEL_COUNT, return;)
@@ -939,9 +959,9 @@ function calls. Pretty please.
 
 					// Subchunk1Size
 
-					uint32_m Subchunk1Size = 16;
+					uint32_m Subchunk1Size = 18;
 					if (muaf_is_audio_data_type_pcm(info.data_type)) {
-						Subchunk1Size = 18;
+						Subchunk1Size = 16;
 					}
 					muaf_wleuint32(&fmt_subchunk[4], Subchunk1Size);
 
@@ -1038,6 +1058,123 @@ function calls. Pretty please.
 					MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_WRITE_CALL_FAILED, mu_fclose(file); mu_remove(filename); return;)
 
 				mu_fclose(file);
+			}
+
+			void muaf_wav_audio_chunk_write_add_chunk(muafResult* result, const char* filename, muAudioFileInfo info, muAudioChunk audio_chunk) {
+				MU_ASSERT(audio_chunk.data_type == info.data_type, result, MUAF_MISMATCH_DATA_TYPE, return;)
+				MU_ASSERT(audio_chunk.channel_interleaving == MU_CHANNEL_CONSECUTIVE, result, MUAF_MISMATCH_CHANNEL_INTERLEAVING, return;)
+
+				/* Read data (read size stuff) */
+
+					FILE_M* file = mu_fopen(filename, "rb");
+					MU_ASSERT(file != 0, result, MUAF_FAILED_TO_OPEN_FILE, return;)
+
+					mu_fseek(file, 0, SEEK_END);
+					size_m filesize = mu_ftell(file);
+					mu_fseek(file, 0, SEEK_SET);
+
+					// Past RIFF header
+
+					size_m offset = 16;
+					MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return;)
+
+					// Past Subchunk1
+
+					muByte Subchunk1SizeB[4];
+					MU_ASSERT(mu_fread(Subchunk1SizeB, 4, 1, file) == 1, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return;)
+					uint32_m Subchunk1Size = muaf_leuint32(Subchunk1SizeB);
+					// I'm like, 99.99% sure there should be a "+ 4" after Subchunk1Size here, but
+					// it doesn't work if I do it. :L
+					offset += Subchunk1Size + 4;
+					MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return;)
+
+					// Past possible "fact" subchunk
+
+					muBool has_fact = MU_FALSE;
+					size_m fact_index = 0;
+					muByte chunk_id[4];
+					MU_ASSERT(mu_fread(chunk_id, 4, 1, file) == 1, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return;)
+					if (chunk_id[0] == 0x66 && chunk_id[1] == 0x61 && 
+						chunk_id[2] == 0x63 && chunk_id[3] == 0x74) {
+						has_fact = MU_TRUE;
+						fact_index = offset;
+
+						offset += 4;
+						MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return;)
+
+						muByte FactchunkSizeB[4];
+						MU_ASSERT(mu_fread(FactchunkSizeB, 4, 1, file) == 1, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return;)
+						uint32_m FactchunkSize = muaf_leuint32(FactchunkSizeB);
+						offset += FactchunkSize + 4;
+						MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return;)
+					} else {
+						offset += 4;
+						MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return;)
+					}
+
+					// To Subchunk2 (data)
+
+					size_m Subchunk2Size_offset = offset;
+					muByte Subchunk2SizeB[4];
+					// This fails
+					MU_ASSERT(mu_fread(Subchunk2SizeB, 4, 1, file) == 1, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return;)
+					uint32_m Subchunk2Size = muaf_leuint32(Subchunk2SizeB);
+
+					size_m sample_count = Subchunk2Size / (info.channel_count * muaf_get_byte_size_of_audio_data_type(info.data_type));
+					//size_m chunk_index = sample_count / MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT;
+					mu_fclose(file);
+
+					/*MU_ASSERT(chunk_index < info.chunk_count, result, MUAF_OVERFLOW_CHUNK, return;)
+					if ((chunk_index+1) != info.chunk_count) {
+						MU_ASSERT(audio_chunk.data_size == info.max_chunk_size, result, MUAF_INVALID_CHUNK_SIZE, return;)
+					}*/
+
+				/* Append data (add chunk data) */
+
+					file = mu_fopen(filename, "ab");
+					MU_ASSERT(file != 0, result, MUAF_FAILED_TO_OPEN_FILE, return;)
+
+					MU_ASSERT(mu_fwrite(audio_chunk.data, audio_chunk.data_size, 1, file) == 1, result, MUAF_WRITE_CALL_FAILED, mu_fclose(file); return;)
+					filesize += audio_chunk.data_size;
+					sample_count += audio_chunk.data_size / (info.channel_count * muaf_get_byte_size_of_audio_data_type(info.data_type));
+
+					mu_fclose(file);
+
+				/* Write data (correct size values) */
+
+					file = mu_fopen(filename, "rb+");
+					MU_ASSERT(file != 0, result, MUAF_FAILED_TO_OPEN_FILE, return;)
+
+					// Correct ChunkSize
+
+					MU_ASSERT(mu_fseek(file, 4, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return;)
+					uint32_m ChunkSize = filesize - 8;
+					muByte ChunkSizeB[4];
+					muaf_wleuint32(ChunkSizeB, ChunkSize);
+					MU_ASSERT(mu_fwrite(ChunkSizeB, 4, 1, file) == 1, result, MUAF_WRITE_CALL_FAILED, mu_fclose(file); return;)
+
+					// Correct FactSampleLength
+
+					if (has_fact) {
+						MU_ASSERT(mu_fseek(file, fact_index + 8, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return;)
+						uint32_m FactSampleLength = info.channel_count * sample_count;
+						muByte FactSampleLengthB[4];
+						muaf_wleuint32(FactSampleLengthB, FactSampleLength);
+						MU_ASSERT(mu_fwrite(FactSampleLengthB, 4, 1, file) == 1, result, MUAF_WRITE_CALL_FAILED, mu_fclose(file); return;)
+					}
+
+					// Correct Subchunk2Size
+
+					MU_ASSERT(mu_fseek(file, Subchunk2Size_offset, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return;)
+					Subchunk2Size = sample_count * info.channel_count * muaf_get_byte_size_of_audio_data_type(info.data_type);
+					muaf_wleuint32(Subchunk2SizeB, Subchunk2Size);
+					MU_ASSERT(mu_fwrite(Subchunk2SizeB, 4, 1, file) == 1, result, MUAF_WRITE_CALL_FAILED, mu_fclose(file); return;)
+
+					mu_fclose(file);
+			}
+
+			void muaf_wav_audio_chunk_write_term(muafResult* result, const char* filename, muAudioFileInfo info) {
+				if (result) {} if (filename) {} if (info.sample_rate) {}
 			}
 
 	#endif /* MUAF_NO_WAV */
@@ -1144,6 +1281,10 @@ function calls. Pretty please.
 						case MUAF_INVALID_CHUNK_INDEX: return "MUAF_INVALID_CHUNK_INDEX"; break;
 						case MUAF_INVALID_CHANNEL_COUNT: return "MUAF_INVALID_CHANNEL_COUNT"; break;
 						case MUAF_INVALID_SAMPLE_RATE: return "MUAF_INVALID_SAMPLE_RATE"; break;
+						case MUAF_INVALID_CHUNK_SIZE: return "MUAF_INVALID_CHUNK_SIZE"; break;
+						case MUAF_MISMATCH_DATA_TYPE: return "MUAF_MISMATCH_DATA_TYPE"; break;
+						case MUAF_MISMATCH_CHANNEL_INTERLEAVING: return "MUAF_MISMATCH_CHANNEL_INTERLEAVING"; break;
+						case MUAF_OVERFLOW_CHUNK: return "MUAF_OVERFLOW_CHUNK"; break;
 						case MUAF_UNKNOWN_AUDIO_FILE_FORMAT: return "MUAF_UNKNOWN_AUDIO_FILE_FORMAT"; break;
 						case MUAF_WAV_INVALID_RIFF_HEADER_CHUNK_SIZE: return "MUAF_WAV_INVALID_RIFF_HEADER_CHUNK_SIZE"; break;
 						case MUAF_WAV_INVALID_RIFF_HEADER_FORMAT: return "MUAF_WAV_INVALID_RIFF_HEADER_FORMAT"; break;
@@ -1189,6 +1330,7 @@ function calls. Pretty please.
 			}
 
 			MUDEF muAudioFileInfo mu_audio_file_get_info(muafResult* result, const char* filename) {
+				if (filename) {}
 				MU_SET_RESULT(result, MUAF_SUCCESS)
 
 				muAudioFileFormat format = mu_audio_file_get_format(result, filename);
@@ -1197,12 +1339,13 @@ function calls. Pretty please.
 					default: MU_SET_RESULT(result, MUAF_UNKNOWN_AUDIO_FILE_FORMAT) return MU_ZERO_STRUCT(muAudioFileInfo); break;
 
 					#ifndef MUAF_NO_WAV
-						case MU_AUDIO_FILE_WAV: { return muaf_wav_audio_file_get_info(result, filename, 0); } break;
+						case MU_AUDIO_FILE_WAV: { return muaf_wav_audio_file_get_info(result, filename, 0, MU_TRUE); } break;
 					#endif
 				}
 			}
 
 			MUDEF muAudioChunk mu_audio_file_read_chunks(muafResult* result, const char* filename, size_m chunk_index, size_m chunk_length, muByte* data) {
+				if (filename) {} if (chunk_index) {} if (chunk_length) {} if (data) {}
 				MU_SET_RESULT(result, MUAF_SUCCESS)
 
 				muAudioFileFormat format = mu_audio_file_get_format(result, filename);
@@ -1229,6 +1372,7 @@ function calls. Pretty please.
 		/* Write */
 
 			MUDEF void mu_audio_chunk_write_init(muafResult* result, const char* filename, muAudioFileInfo info) {
+				if (filename) {} if (info.sample_rate) {}
 				MU_SET_RESULT(result, MUAF_SUCCESS)
 
 				switch (info.format) {
@@ -1236,6 +1380,32 @@ function calls. Pretty please.
 
 					#ifndef MUAF_NO_WAV
 						case MU_AUDIO_FILE_WAV: { muaf_wav_audio_chunk_write_init(result, filename, info); return; } break;
+					#endif
+				}
+			}
+
+			MUDEF void mu_audio_chunk_write_add_chunk(muafResult* result, const char* filename, muAudioFileInfo info, muAudioChunk audio_chunk) {
+				if (filename) {} if (info.sample_rate) {} if (audio_chunk.data) {}
+				MU_SET_RESULT(result, MUAF_SUCCESS)
+
+				switch (info.format) {
+					default: MU_SET_RESULT(result, MUAF_UNKNOWN_AUDIO_FILE_FORMAT) return; break;
+
+					#ifndef MUAF_NO_WAV
+						case MU_AUDIO_FILE_WAV: { muaf_wav_audio_chunk_write_add_chunk(result, filename, info, audio_chunk); return; } break;
+					#endif
+				}
+			}
+
+			MUDEF void mu_audio_chunk_write_term(muafResult* result, const char* filename, muAudioFileInfo info) {
+				if (filename) {} if (info.sample_rate) {}
+				MU_SET_RESULT(result, MUAF_SUCCESS)
+
+				switch (info.format) {
+					default: MU_SET_RESULT(result, MUAF_UNKNOWN_AUDIO_FILE_FORMAT) return; break;
+
+					#ifndef MUAF_NO_WAV
+						case MU_AUDIO_FILE_WAV: { muaf_wav_audio_chunk_write_term(result, filename, info); return; } break;
 					#endif
 				}
 			}
