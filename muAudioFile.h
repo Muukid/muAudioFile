@@ -12,8 +12,13 @@ checks will not be performed on excluded file formats, but extension checks will
 @MENTION MU_AUDIO_DATA_UNKNOWN is valid to have as the 'data_type' member for muAudioFileInfo, as
 it indicates that the data used for each chunk can differ.
 @MENTION MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT
+@MENTION Pretty please do not change the contents of the muAudioFileInfo struct over multiple
+function calls. Pretty please.
+@MENTION 'mu_audio_chunk_write_init' wipes contents.
 
 @TODO Add more upfront info to muAudioFileInfo.
+@TODO Separate byte manipulation library.
+@TODO Don't forget padding byte for wav data.
 */
 
 /* muu header commit 96a78ce */
@@ -292,7 +297,9 @@ it indicates that the data used for each chunk can differ.
 			!defined(mu_fclose) || \
 			!defined(mu_fseek)  || \
 			!defined(mu_fread)  || \
-			!defined(mu_ftell)
+			!defined(mu_ftell)  || \
+			!defined(mu_fwrite) || \
+			!defined(mu_remove)
 
 			#include <stdio.h>
 
@@ -318,6 +325,14 @@ it indicates that the data used for each chunk can differ.
 
 			#ifndef mu_ftell
 				#define mu_ftell ftell
+			#endif
+
+			#ifndef mu_fwrite
+				#define mu_fwrite fwrite
+			#endif
+
+			#ifndef mu_remove
+				#define mu_remove remove
 			#endif
 
 		#endif
@@ -362,10 +377,13 @@ it indicates that the data used for each chunk can differ.
 			MUAF_ALLOCATION_FAILED,
 			MUAF_FAILED_TO_OPEN_FILE,
 			MUAF_READ_CALL_FAILED,
+			MUAF_WRITE_CALL_FAILED,
 
 			MUAF_INVALID_DATA_SIZE,
 			MUAF_INVALID_SIGNATURE,
 			MUAF_INVALID_CHUNK_INDEX,
+			MUAF_INVALID_CHANNEL_COUNT,
+			MUAF_INVALID_SAMPLE_RATE,
 
 			MUAF_UNKNOWN_AUDIO_FILE_FORMAT,
 
@@ -438,7 +456,7 @@ it indicates that the data used for each chunk can differ.
 			MUDEF const char* muaf_result_get_name(muafResult result);
 		#endif
 
-		/* Audio file read */
+		/* Read */
 
 			MUDEF muAudioFileFormat mu_audio_file_get_format(muafResult* result, const char* filename);
 			MUDEF muAudioFileInfo mu_audio_file_get_info(muafResult* result, const char* filename);
@@ -446,15 +464,15 @@ it indicates that the data used for each chunk can differ.
 			MUDEF muAudioChunk mu_audio_file_read_chunks(muafResult* result, const char* filename, size_m chunk_index, size_m chunk_length, muByte* data);
 			MUDEF muAudioChunk mu_audio_file_free_chunk(muafResult* result, muAudioChunk chunk);
 
-		/* Conversion */
-
-			MUDEF muAudioChunk mu_audio_file_convert_chunk_type(muafResult* result, muAudioChunk audio_chunk, muAudioDataType desired_type);
-
-		/* Audio file write */
+		/* Write */
 
 			MUDEF void mu_audio_chunk_write_init(muafResult* result, const char* filename, muAudioFileInfo info);
 			MUDEF void mu_audio_chunk_write_add_chunk(muafResult* result, const char* filename, muAudioChunk audio_chunk);
 			MUDEF void mu_audio_chunk_write_term(muafResult* result, const char* filename);
+
+		/* Conversion */
+
+			MUDEF muAudioChunk mu_audio_file_convert_chunk_type(muafResult* result, muAudioChunk audio_chunk, muAudioDataType desired_type);
 
 	#ifdef __cplusplus
 	}
@@ -470,29 +488,75 @@ it indicates that the data used for each chunk can differ.
 
 	/* Useful shared functions */
 
-		uint16_m muaf_leuint16(muByte* b) {
-			return b[0] + (b[1] << 8);
-		}
-		uint16_m muaf_beuint16(muByte* b) {
-			return (b[0] << 8) + b[1];
-		}
-		uint32_m muaf_leuint32(muByte* b) {
-			return b[0] + (b[1] << 8) + (b[2] << 16) + (b[3] << 24);
-		}
-		uint32_m muaf_beuint32(muByte* b) {
-			// Pretty sure this is correct...
-			return (b[0] << 24) + (b[1] << 16) + (b[2] << 8) + b[3];
-		}
+		/* LE/BE uintN_m/muByte conversion */
 
-		size_m muaf_get_byte_size_of_audio_data_type(muAudioDataType data_type) {
-			switch (data_type) {
-				default: case MU_AUDIO_DATA_UINT8: return 1; break;
-				case MU_AUDIO_DATA_INT16: return 2; break;
-				case MU_AUDIO_DATA_INT24: return 3; break;
-				case MU_AUDIO_DATA_INT32: case MU_AUDIO_DATA_FLOAT32: return 4; break;
-				case MU_AUDIO_DATA_INT64: case MU_AUDIO_DATA_FLOAT64: return 8; break;
+			// https://stackoverflow.com/a/22613092
+			// ^ This post is actually amazing
+
+			// I really need a separate library for byte manipulation lol
+
+			// Still not sure if the BE functions are correct...
+
+			uint16_m muaf_leuint16(muByte* b) {
+				return (uint32_m)b[0] << 0 |
+				       (uint32_m)b[1] << 8 ;
 			}
-		}
+			uint16_m muaf_beuint16(muByte* b) {
+				return (uint32_m)b[1] << 0 |
+				       (uint32_m)b[0] << 8 ;
+			}
+			uint32_m muaf_leuint32(muByte* b) {
+				return (uint32_m)b[0] << 0  |
+				       (uint32_m)b[1] << 8  |
+				       (uint32_m)b[2] << 16 |
+				       (uint32_m)b[3] << 24 ;
+			}
+			uint32_m muaf_beuint32(muByte* b) {
+				return (uint32_m)b[3] << 0  |
+				       (uint32_m)b[2] << 8  |
+				       (uint32_m)b[1] << 16 |
+				       (uint32_m)b[0] << 24 ;
+			}
+
+			void muaf_wleuint16(muByte* b, uint16_m i) {
+				b[0] = (uint8_m)(i >> 0);
+				b[1] = (uint8_m)(i >> 8);
+			}
+			void muaf_wbeuint16(muByte* b, uint16_m i) {
+				b[1] = (uint8_m)(i >> 0);
+				b[0] = (uint8_m)(i >> 8);
+			}
+			void muaf_wleuint32(muByte* b, uint32_m i) {
+				b[0] = (uint8_m)(i >> 0);
+				b[1] = (uint8_m)(i >> 8);
+				b[2] = (uint8_m)(i >> 16);
+				b[3] = (uint8_m)(i >> 24);
+			}
+			void muaf_wbeuint32(muByte* b, uint32_m i) {
+				b[3] = (uint8_m)(i >> 0);
+				b[2] = (uint8_m)(i >> 8);
+				b[1] = (uint8_m)(i >> 16);
+				b[0] = (uint8_m)(i >> 24);
+			}
+
+		/* Audio data type information queries */
+
+			size_m muaf_get_byte_size_of_audio_data_type(muAudioDataType data_type) {
+				switch (data_type) {
+					default: case MU_AUDIO_DATA_UINT8: return 1; break;
+					case MU_AUDIO_DATA_INT16: return 2; break;
+					case MU_AUDIO_DATA_INT24: return 3; break;
+					case MU_AUDIO_DATA_INT32: case MU_AUDIO_DATA_FLOAT32: return 4; break;
+					case MU_AUDIO_DATA_INT64: case MU_AUDIO_DATA_FLOAT64: return 8; break;
+				}
+			}
+
+			muBool muaf_is_audio_data_type_pcm(muAudioDataType data_type) {
+				switch (data_type) {
+					default: return MU_TRUE; break;
+					case MU_AUDIO_DATA_FLOAT32: case MU_AUDIO_DATA_FLOAT64: return MU_FALSE; break;
+				}
+			}
 
 	/* WAV */
 	#ifndef MUAF_NO_WAV
@@ -508,6 +572,12 @@ it indicates that the data used for each chunk can differ.
 		// * As of right now, this parser is unable to read wav files with multiple subchunks.
 		// * As of right now, wav files are one big chunk. This is not THAT bad, as the maximum 
 		// size of a wav is ~4 GiB, but it would be nice to add later. @TODO
+		// * I'm assuming that IEEE float format wav files add a fmt subchunk extension with 
+		// nothing just to remain standard compliant, but I could totally be wrong.
+
+		/* - TODOs - */
+
+		// @TODO Add cue, playlist, and associated data list chunk handling.
 
 		/*  - References - */
 
@@ -516,6 +586,7 @@ it indicates that the data used for each chunk can differ.
 		// https://isip.piconepress.com/projects/speech/software/tutorials/production/fundamentals/v1.0/section_02/s02_01_p05.html
 		// http://soundfile.sapp.org/doc/WaveFormat/
 		// https://www.recordingblogs.com/wiki/fact-chunk-of-a-wave-file
+		// https://en.wikipedia.org/wiki/WAV
 
 		// "MAX" because chunks sometimes need to be cut short
 		#ifndef MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT
@@ -577,21 +648,12 @@ it indicates that the data used for each chunk can differ.
 						,result, MUAF_WAV_INVALID_RIFF_HEADER_FORMAT, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);
 					)
 
-					// Padding
-
-					if (mu_ftell(file) % 2 != 0) {
-						offset += 1;
-						MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);)
-					}
-
 				/* "fmt " subchunk */
 
 					muByte fmt_subchunk[24];
 					MU_ASSERT(mu_fread(fmt_subchunk, 24, 1, file) == 1, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);)
 					offset += 24;
 					MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);)
-
-					// If errors are printed here, prolly needs to be 24 + 12
 
 					// Subchunk1ID
 
@@ -665,13 +727,6 @@ it indicates that the data used for each chunk can differ.
 					}
 				}
 
-				// Padding
-
-				if (mu_ftell(file) % 2 != 0) {
-					offset += 1;
-					MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);)
-				}
-
 				muByte next_id[4];
 				MU_ASSERT(mu_fread(next_id, 4, 1, file) == 1, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);)
 				offset += 4;
@@ -695,13 +750,6 @@ it indicates that the data used for each chunk can differ.
 					// We're just gonna ignore the fact subchunk for now
 					if (FactSize != 0) {
 						offset += FactSize;
-						MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);)
-					}
-
-					// Padding
-
-					if (mu_ftell(file) % 2 != 0) {
-						offset += 1;
 						MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_READ_CALL_FAILED, mu_fclose(file); return MU_ZERO_STRUCT(muAudioFileInfo);)
 					}
 
@@ -839,6 +887,159 @@ it indicates that the data used for each chunk can differ.
 				return chunk;
 			}
 
+			// Philosophy of init/add/term for wav:
+			// * Initiation sets up the beginning headers of the wav file with no data, leaving the
+			// fields ChunkSize, FactSampleLength, and Subchunk2Size empty, as they all depend on 
+			// the amount of samples, something that isn't entirely known yet.
+			// * Chunk addition adds a chunk to the wav file, incrementing the previously unknown
+			// fields.
+			// * Termination performs a final check on these fields, making sure that they add up,
+			// and correcting them if they don't.
+
+			void muaf_wav_audio_chunk_write_init(muafResult* result, const char* filename, muAudioFileInfo info) {
+				MU_ASSERT(info.channel_count >= 1, result, MUAF_INVALID_CHANNEL_COUNT, return;)
+				MU_ASSERT(info.sample_rate >= 1, result, MUAF_INVALID_SAMPLE_RATE, return;)
+
+				uint16_m BitsPerSample = (uint16_m)(muaf_get_byte_size_of_audio_data_type(info.data_type) * (size_m)8);
+
+				FILE_M* file = mu_fopen(filename, "wb");
+				MU_ASSERT(file != 0, result, MUAF_FAILED_TO_OPEN_FILE, return;)
+				size_m offset = 0;
+
+				/* RIFF header */
+
+					muByte riff_header[12] = {0};
+
+					// ChunkID
+
+					riff_header[0] = 0x52; riff_header[1] = 0x49;
+					riff_header[2] = 0x46; riff_header[3] = 0x46;
+
+					// ChunkSize (filled in muaf_wav_audio_chunk_write_term)
+
+					// Format
+
+					riff_header[8]  = 0x57; riff_header[9]  = 0x41;
+					riff_header[10] = 0x56; riff_header[11] = 0x45;
+
+					// Padding
+
+					MU_ASSERT(mu_fwrite(riff_header, sizeof(riff_header), 1, file) == 1, result, MUAF_WRITE_CALL_FAILED, mu_fclose(file); mu_remove(filename); return;)
+					offset += sizeof(riff_header);
+					MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_WRITE_CALL_FAILED, mu_fclose(file); mu_remove(filename); return;)
+
+				/* "fmt " subchunk */
+
+					muByte fmt_subchunk[24] = {0};
+
+					// Subchunk1ID
+
+					fmt_subchunk[0] = 0x66; fmt_subchunk[1] = 0x6d;
+					fmt_subchunk[2] = 0x74; fmt_subchunk[3] = 0x20;
+
+					// Subchunk1Size
+
+					uint32_m Subchunk1Size = 16;
+					if (muaf_is_audio_data_type_pcm(info.data_type)) {
+						Subchunk1Size = 18;
+					}
+					muaf_wleuint32(&fmt_subchunk[4], Subchunk1Size);
+
+					// AudioFormat
+
+					uint16_m AudioFormat = 0;
+
+					switch (info.data_type) {
+						default: MU_SET_RESULT(result, MUAF_WAV_UNSUPPORTED_FMT_SUBCHUNK_AUDIO_FORMAT) mu_fclose(file); mu_remove(filename); return; break;
+
+						case MU_AUDIO_DATA_UINT8: case MU_AUDIO_DATA_INT16: case MU_AUDIO_DATA_INT24:
+						case MU_AUDIO_DATA_INT32: case MU_AUDIO_DATA_INT64:
+						AudioFormat = 0x0001; break;
+
+						case MU_AUDIO_DATA_FLOAT32: case MU_AUDIO_DATA_FLOAT64:
+						AudioFormat = 0x0003; break;
+					}
+
+					muaf_wleuint16(&fmt_subchunk[8], AudioFormat);
+
+					// NumChannels
+
+					uint16_m NumChannels = (uint16_m)info.channel_count;
+					muaf_wleuint16(&fmt_subchunk[10], NumChannels);
+
+					// SampleRate
+
+					uint32_m SampleRate = (uint32_m)info.sample_rate;
+					muaf_wleuint32(&fmt_subchunk[12], SampleRate);
+
+					// ByteRate
+
+					uint32_m ByteRate = (uint32_m)(SampleRate * (uint32_m)NumChannels * (uint32_m)(BitsPerSample/8));
+					muaf_wleuint32(&fmt_subchunk[16], ByteRate);
+
+					// BlockAlign
+
+					uint16_m BlockAlign = (uint16_m)(NumChannels * (BitsPerSample/8));
+					muaf_wleuint16(&fmt_subchunk[20], BlockAlign);
+
+					// BitsPerSample
+
+					muaf_wleuint16(&fmt_subchunk[22], BitsPerSample);
+
+					MU_ASSERT(mu_fwrite(fmt_subchunk, sizeof(fmt_subchunk), 1, file) == 1, result, MUAF_WRITE_CALL_FAILED, mu_fclose(file); mu_remove(filename); return;)
+					offset += sizeof(fmt_subchunk);
+					MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_WRITE_CALL_FAILED, mu_fclose(file); mu_remove(filename); return;)
+
+				/* "fmt " subchunk extension */
+				if (AudioFormat != 0x0001) {
+					muByte ext[2] = {0};
+
+					uint16_m ExtensionSize = 0;
+					muaf_wleuint16(ext, ExtensionSize);
+
+					MU_ASSERT(mu_fwrite(ext, sizeof(ext), 1, file) == 1, result, MUAF_WRITE_CALL_FAILED, mu_fclose(file); mu_remove(filename); return;)
+					offset += sizeof(ext);
+					MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_WRITE_CALL_FAILED, mu_fclose(file); mu_remove(filename); return;)
+				}
+
+				/* "The optional <fact-ck> chunk reports the number of samples for some compressed
+				coding schemes." */
+				// https://en.wikipedia.org/wiki/WAV
+
+				/* "fact" subchunk */
+				if (AudioFormat != 0x0001) {
+					muByte fact_subchunk[8] = {0};
+
+					// FactSize
+
+					uint32_m FactSize = 4;
+					muaf_wleuint32(fact_subchunk, FactSize);
+
+					// FactSampleLength  (filled in muaf_wav_audio_chunk_write_term)
+
+					MU_ASSERT(mu_fwrite(fact_subchunk, sizeof(fact_subchunk), 1, file) == 1, result, MUAF_WRITE_CALL_FAILED, mu_fclose(file); mu_remove(filename); return;)
+					offset += sizeof(fact_subchunk);
+					MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_WRITE_CALL_FAILED, mu_fclose(file); mu_remove(filename); return;)
+				}
+
+				/* "data" subchunk */
+
+					muByte data_presubchunk[8] = {0};
+
+					// Subchunk2ID
+
+					data_presubchunk[0] = 0x64; data_presubchunk[1] = 0x61;
+					data_presubchunk[2] = 0x74; data_presubchunk[3] = 0x61;
+
+					// Subchunk2Size (filled in muaf_wav_audio_chunk_write_term)
+
+					MU_ASSERT(mu_fwrite(data_presubchunk, sizeof(data_presubchunk), 1, file) == 1, result, MUAF_WRITE_CALL_FAILED, mu_fclose(file); mu_remove(filename); return;)
+					offset += sizeof(data_presubchunk);
+					MU_ASSERT(mu_fseek(file, offset, SEEK_SET) == 0, result, MUAF_WRITE_CALL_FAILED, mu_fclose(file); mu_remove(filename); return;)
+
+				mu_fclose(file);
+			}
+
 	#endif /* MUAF_NO_WAV */
 
 	/* Useful functions */
@@ -936,10 +1137,13 @@ it indicates that the data used for each chunk can differ.
 						case MUAF_SUCCESS: return "MUAF_SUCCESS"; break;
 						case MUAF_ALLOCATION_FAILED: return "MUAF_ALLOCATION_FAILED"; break;
 						case MUAF_READ_CALL_FAILED: return "MUAF_READ_CALL_FAILED"; break;
+						case MUAF_WRITE_CALL_FAILED: return "MUAF_WRITE_CALL_FAILED"; break;
 						case MUAF_FAILED_TO_OPEN_FILE: return "MUAF_FAILED_TO_OPEN_FILE"; break;
 						case MUAF_INVALID_DATA_SIZE: return "MUAF_INVALID_DATA_SIZE"; break;
 						case MUAF_INVALID_SIGNATURE: return "MUAF_INVALID_SIGNATURE"; break;
 						case MUAF_INVALID_CHUNK_INDEX: return "MUAF_INVALID_CHUNK_INDEX"; break;
+						case MUAF_INVALID_CHANNEL_COUNT: return "MUAF_INVALID_CHANNEL_COUNT"; break;
+						case MUAF_INVALID_SAMPLE_RATE: return "MUAF_INVALID_SAMPLE_RATE"; break;
 						case MUAF_UNKNOWN_AUDIO_FILE_FORMAT: return "MUAF_UNKNOWN_AUDIO_FILE_FORMAT"; break;
 						case MUAF_WAV_INVALID_RIFF_HEADER_CHUNK_SIZE: return "MUAF_WAV_INVALID_RIFF_HEADER_CHUNK_SIZE"; break;
 						case MUAF_WAV_INVALID_RIFF_HEADER_FORMAT: return "MUAF_WAV_INVALID_RIFF_HEADER_FORMAT"; break;
@@ -958,7 +1162,7 @@ it indicates that the data used for each chunk can differ.
 				}
 			#endif
 
-		/* Audio file read */
+		/* Read */
 
 			MUDEF muAudioFileFormat mu_audio_file_get_format(muafResult* result, const char* filename) {
 				MU_SET_RESULT(result, MUAF_SUCCESS)
@@ -1020,6 +1224,20 @@ it indicates that the data used for each chunk can differ.
 				}
 
 				return MU_ZERO_STRUCT(muAudioChunk);
+			}
+
+		/* Write */
+
+			MUDEF void mu_audio_chunk_write_init(muafResult* result, const char* filename, muAudioFileInfo info) {
+				MU_SET_RESULT(result, MUAF_SUCCESS)
+
+				switch (info.format) {
+					default: MU_SET_RESULT(result, MUAF_UNKNOWN_AUDIO_FILE_FORMAT) return; break;
+
+					#ifndef MUAF_NO_WAV
+						case MU_AUDIO_FILE_WAV: { muaf_wav_audio_chunk_write_init(result, filename, info); return; } break;
+					#endif
+				}
 			}
 
 	#ifdef __cplusplus
