@@ -9,8 +9,8 @@ More explicit license information at the end of file.
 @MENTION The size of a given chunk fundamentally cannot be predicted ahead of time due to the
 nature of how different file formats split up their audio and the most efficient way to chunk it
 depending on that, both in the context of all chunks and each individual chunk. The only thing that
-can be given is the maximum size of any given chunk, which, for all file formats, cannot exceed ~8
-megabytes.
+can be given is the maximum size of any given chunk, which, for all file formats, cannot exceed one
+megabyte.
 @MENTION mu_audio_file_get_format can guess based on inner file content signatures. Also, signature
 checks will not be performed on excluded file formats, but extension checks will.
 @MENTION MUAF_READ_CALL_FAILED is called for unexpected EOF usually.
@@ -609,7 +609,7 @@ leads to undefined behavior per audio file format.
 
 		// "MAX" because chunks sometimes need to be cut short
 		#ifndef MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT
-			#define MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT 4096
+			#define MUAF_WAV_MAX_CHUNK_SAMPLE_COUNT 65536
 		#endif
 
 		/* Useful functions */
