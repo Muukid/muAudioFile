@@ -30,7 +30,7 @@ leads to undefined behavior per audio file format.
 @TODO Don't forget padding byte for wav data.
 */
 
-/* muu header commit 96a78ce */
+/* muu header commit 289f999 */
 
 #ifndef MUU_H
 	#define MUU_H
@@ -192,6 +192,66 @@ leads to undefined behavior per audio file format.
 			#else
 				#define MU_ZERO_STRUCT_CONST(s) {0}
 			#endif
+		#endif
+
+		#ifndef muByte
+			#define muByte uint8_m
+		#endif
+
+		#ifndef mu_rle_uint8
+			#define mu_rle_uint8(b) ((uint8_m)b[0] << 0)
+		#endif
+		#ifndef mu_rbe_uint8
+			#define mu_rbe_uint8(b) ((uint8_m)b[0] << 0)
+		#endif
+
+		#ifndef mu_rle_uint16
+			#define mu_rle_uint16(b) ((uint16_m)b[0] << 0 | (uint16_m)b[1] << 8)
+		#endif
+		#ifndef mu_rbe_uint16
+			#define mu_rbe_uint16(b) ((uint16_m)b[1] << 0 | (uint16_m)b[0] << 8)
+		#endif
+
+		#ifndef mu_rle_uint32
+			#define mu_rle_uint32(b) ((uint32_m)b[0] << 0 | (uint32_m)b[1] << 8 | (uint32_m)b[2] << 16 | (uint32_m)b[3] << 24)
+		#endif
+		#ifndef mu_rbe_uint32
+			#define mu_rbe_uint32(b) ((uint32_m)b[3] << 0 | (uint32_m)b[2] << 8 | (uint32_m)b[1] << 16 | (uint32_m)b[0] << 24)
+		#endif
+
+		#ifndef mu_rle_uint64
+			#define mu_rle_uint64(b) ((uint64_m)b[0] << 0 | (uint64_m)b[1] << 8 | (uint64_m)b[2] << 16 | (uint64_m)b[3] << 24 | (uint64_m)b[4] << 32 | (uint64_m)b[5] << 40 | (uint64_m)b[6] << 48 | (uint64_m)b[7] << 56)
+		#endif
+		#ifndef mu_rbe_uint64
+			#define mu_rbe_uint64(b) ((uint64_m)b[7] << 0 | (uint64_m)b[6] << 8 | (uint64_m)b[5] << 16 | (uint64_m)b[4] << 24 | (uint64_m)b[3] << 32 | (uint64_m)b[2] << 40 | (uint64_m)b[1] << 48 | (uint64_m)b[0] << 56)
+		#endif
+
+		#ifndef mu_wle_uint8
+			#define mu_wle_uint8(b, i) b[0] = (uint8_m)(i >> 0);
+		#endif
+		#ifndef mu_wbe_uint8
+			#define mu_wbe_uint8(b, i) b[0] = (uint8_m)(i >> 0);
+		#endif
+
+		#ifndef mu_wle_uint16
+			#define mu_wle_uint16(b, i) b[0] = (uint8_m)(i >> 0); b[1] = (uint8_m)(i >> 8);
+		#endif
+		#ifndef mu_wbe_uint16
+			#define mu_wbe_uint16(b, i) b[1] = (uint8_m)(i >> 0); b[0] = (uint8_m)(i >> 8);
+		#endif
+
+		#ifndef mu_wle_uint32
+			#define mu_wle_uint32(b, i) b[0] = (uint8_m)(i >> 0); b[1] = (uint8_m)(i >> 8); b[2] = (uint8_m)(i >> 16); b[3] = (uint8_m)(i >> 24);
+		#endif
+		#ifndef mu_wbe_uint32
+			#define mu_wbe_uint32(b, i) b[3] = (uint8_m)(i >> 0); b[2] = (uint8_m)(i >> 8); b[1] = (uint8_m)(i >> 16); b[0] = (uint8_m)(i >> 24);
+		#endif
+
+		#ifndef mu_wle_uint64
+			#define mu_wle_uint64(b, i) b[0] = (uint8_m)(i >> 0); b[1] = (uint8_m)(i >> 8); b[2] = (uint8_m)(i >> 16); b[3] = (uint8_m)(i >> 24); b[4] = (uint8_m)(i >> 32); b[5] = (uint8_m)(i >> 40); b[6] = (uint8_m)(i >> 48); b[7] = (uint8_m)(i >> 56);
+		#endif
+		#ifndef mu_wbe_uint64
+			#define mu_wbe_uint64(b, i) b[7] = (uint8_m)(i >> 0); b[6] = (uint8_m)(i >> 8); b[5] = (uint8_m)(i >> 16); b[4] = (uint8_m)(i >> 24); b[3] = (uint8_m)(i >> 32); b[2] = (uint8_m)(i >> 40); b[1] = (uint8_m)(i >> 48); b[0] = (uint8_m)(i >> 56);
 		#endif
 
 		#ifndef MU_NULL_PTR
