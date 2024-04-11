@@ -30,311 +30,313 @@ leads to undefined behavior per audio file format.
 @TODO Don't forget padding byte for wav data.
 */
 
-/* muu header commit 289f999 */
-
-#ifndef MUU_H
-	#define MUU_H
-	
-	#if !defined(MU_SECURE_WARNINGS) && !defined(_CRT_SECURE_NO_WARNINGS)
-		#define _CRT_SECURE_NO_WARNINGS
-	#endif
-
-	#ifdef __cplusplus
-	extern "C" { // }
-	#endif
-
-	#define MUU_VERSION_MAJOR 1
-	#define MUU_VERSION_MINOR 0
-	#define MUU_VERSION_PATCH 0
-
-	/* C standard library dependencies */
-
-		#if !defined(int8_m)   || \
-			!defined(uint8_m)  || \
-			!defined(int16_m)  || \
-			!defined(uint16_m) || \
-			!defined(int32_m)  || \
-			!defined(uint32_m) || \
-			!defined(int64_m)  || \
-			!defined(uint64_m)
-
-			#define __STDC_LIMIT_MACROS
-			#define __STDC_CONSTANT_MACROS
-			#include <stdint.h>
-
-			#ifndef int8_m
-				#ifdef INT8_MAX
-					#define int8_m int8_t
-				#else
-					#define int8_m char
-				#endif
-			#endif
-
-			#ifndef uint8_m
-				#ifdef UINT8_MAX
-					#define uint8_m uint8_t
-				#else
-					#define uint8_m unsigned char
-				#endif
-			#endif
-
-			#ifndef int16_m
-				#ifdef INT16_MAX
-					#define int16_m int16_t
-				#else
-					#define int16_m short
-				#endif
-			#endif
-
-			#ifndef uint16_m
-				#ifdef UINT16_MAX
-					#define uint16_m uint16_t
-				#else
-					#define uint16_m unsigned short
-				#endif
-			#endif
-
-			#ifndef int32_m
-				#ifdef INT32_MAX
-					#define int32_m int32_t
-				#else
-					#define int32_m long
-				#endif
-			#endif
-
-			#ifndef uint32_m
-				#ifdef UINT32_MAX
-					#define uint32_m uint32_t
-				#else
-					#define uint32_m unsigned long
-				#endif
-			#endif
-
-			#ifndef int64_m
-				#ifdef INT64_MAX
-					#define int64_m int64_t
-				#else
-					#define int64_m long long
-				#endif
-			#endif
-
-			#ifndef uint64_m
-				#ifdef UINT64_MAX
-					#define uint64_m uint64_t
-				#else
-					#define uint64_m unsigned long long
-				#endif
-			#endif
-
-		#endif
-
-		#if !defined(size_m)
-
-			#include <stddef.h>
-
-			#ifndef size_m
-				#define size_m size_t
-			#endif
-
-		#endif
-
-		#if !defined(MU_SIZE_MAX)
-
-			#include <stdint.h>
-
-			#ifndef MU_SIZE_MAX
-				#define MU_SIZE_MAX SIZE_MAX
-			#endif
-
-		#endif
-
-		#if !defined(muBool)   || \
-			!defined(MU_TRUE)  || \
-			!defined(MU_FALSE)
-
-			#include <stdbool.h>
-
-			#ifndef muBool
-				#define muBool bool
-			#endif
-
-			#ifndef MU_TRUE
-				#define MU_TRUE true
-			#endif
-
-			#ifndef MU_FALSE
-				#define MU_FALSE false
-			#endif
-
-		#endif
-
-	/* Useful macros */
-
-		#ifndef MUDEF
-			#ifdef MU_STATIC
-				#define MUDEF static
-			#else
-				#define MUDEF extern
-			#endif
-		#endif
-
-		#ifndef MU_ZERO_STRUCT
-			#ifdef __cplusplus
-				#define MU_ZERO_STRUCT(s) {}
-			#else
-				#define MU_ZERO_STRUCT(s) (s){0}
-			#endif
-		#endif
-
-		#ifndef MU_ZERO_STRUCT_CONST
-			#ifdef __cplusplus
-				#define MU_ZERO_STRUCT_CONST(s) {}
-			#else
-				#define MU_ZERO_STRUCT_CONST(s) {0}
-			#endif
-		#endif
-
-		#ifndef muByte
-			#define muByte uint8_m
-		#endif
-
-		#ifndef mu_rle_uint8
-			#define mu_rle_uint8(b) ((uint8_m)b[0] << 0)
-		#endif
-		#ifndef mu_rbe_uint8
-			#define mu_rbe_uint8(b) ((uint8_m)b[0] << 0)
-		#endif
-
-		#ifndef mu_rle_uint16
-			#define mu_rle_uint16(b) ((uint16_m)b[0] << 0 | (uint16_m)b[1] << 8)
-		#endif
-		#ifndef mu_rbe_uint16
-			#define mu_rbe_uint16(b) ((uint16_m)b[1] << 0 | (uint16_m)b[0] << 8)
-		#endif
-
-		#ifndef mu_rle_uint32
-			#define mu_rle_uint32(b) ((uint32_m)b[0] << 0 | (uint32_m)b[1] << 8 | (uint32_m)b[2] << 16 | (uint32_m)b[3] << 24)
-		#endif
-		#ifndef mu_rbe_uint32
-			#define mu_rbe_uint32(b) ((uint32_m)b[3] << 0 | (uint32_m)b[2] << 8 | (uint32_m)b[1] << 16 | (uint32_m)b[0] << 24)
-		#endif
-
-		#ifndef mu_rle_uint64
-			#define mu_rle_uint64(b) ((uint64_m)b[0] << 0 | (uint64_m)b[1] << 8 | (uint64_m)b[2] << 16 | (uint64_m)b[3] << 24 | (uint64_m)b[4] << 32 | (uint64_m)b[5] << 40 | (uint64_m)b[6] << 48 | (uint64_m)b[7] << 56)
-		#endif
-		#ifndef mu_rbe_uint64
-			#define mu_rbe_uint64(b) ((uint64_m)b[7] << 0 | (uint64_m)b[6] << 8 | (uint64_m)b[5] << 16 | (uint64_m)b[4] << 24 | (uint64_m)b[3] << 32 | (uint64_m)b[2] << 40 | (uint64_m)b[1] << 48 | (uint64_m)b[0] << 56)
-		#endif
-
-		#ifndef mu_wle_uint8
-			#define mu_wle_uint8(b, i) b[0] = (uint8_m)(i >> 0);
-		#endif
-		#ifndef mu_wbe_uint8
-			#define mu_wbe_uint8(b, i) b[0] = (uint8_m)(i >> 0);
-		#endif
-
-		#ifndef mu_wle_uint16
-			#define mu_wle_uint16(b, i) b[0] = (uint8_m)(i >> 0); b[1] = (uint8_m)(i >> 8);
-		#endif
-		#ifndef mu_wbe_uint16
-			#define mu_wbe_uint16(b, i) b[1] = (uint8_m)(i >> 0); b[0] = (uint8_m)(i >> 8);
-		#endif
-
-		#ifndef mu_wle_uint32
-			#define mu_wle_uint32(b, i) b[0] = (uint8_m)(i >> 0); b[1] = (uint8_m)(i >> 8); b[2] = (uint8_m)(i >> 16); b[3] = (uint8_m)(i >> 24);
-		#endif
-		#ifndef mu_wbe_uint32
-			#define mu_wbe_uint32(b, i) b[3] = (uint8_m)(i >> 0); b[2] = (uint8_m)(i >> 8); b[1] = (uint8_m)(i >> 16); b[0] = (uint8_m)(i >> 24);
-		#endif
-
-		#ifndef mu_wle_uint64
-			#define mu_wle_uint64(b, i) b[0] = (uint8_m)(i >> 0); b[1] = (uint8_m)(i >> 8); b[2] = (uint8_m)(i >> 16); b[3] = (uint8_m)(i >> 24); b[4] = (uint8_m)(i >> 32); b[5] = (uint8_m)(i >> 40); b[6] = (uint8_m)(i >> 48); b[7] = (uint8_m)(i >> 56);
-		#endif
-		#ifndef mu_wbe_uint64
-			#define mu_wbe_uint64(b, i) b[7] = (uint8_m)(i >> 0); b[6] = (uint8_m)(i >> 8); b[5] = (uint8_m)(i >> 16); b[4] = (uint8_m)(i >> 24); b[3] = (uint8_m)(i >> 32); b[2] = (uint8_m)(i >> 40); b[1] = (uint8_m)(i >> 48); b[0] = (uint8_m)(i >> 56);
-		#endif
-
-		#ifndef MU_NULL_PTR
-			#define MU_NULL_PTR 0
-		#endif
-
-		#ifndef MU_NULL
-			#define MU_NULL 0
-		#endif
-
-		#ifndef MU_NONE
-			#define MU_NONE MU_SIZE_MAX
-		#endif
-
-		#ifndef MU_SET_RESULT
-			#define MU_SET_RESULT(res, val) if(res!=MU_NULL_PTR){*res=val;}
-		#endif
-
-		#ifndef MU_ASSERT
-			#define MU_ASSERT(cond, res, val, after) if(!(cond)){MU_SET_RESULT(res, val) after}
-		#endif
-
-		#define MU_ENUM(name, ...) enum _##name{__VA_ARGS__};typedef enum _##name _##name; typedef size_m name;
-
-		#if !defined(MU_WIN32) && !defined(MU_UNIX)
-			#if defined(WIN32) || defined(_WIN32)
-				#define MU_WIN32
-			#elif defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
-				#define MU_UNIX
-			#endif
-		#endif
-
-		#define MU_HRARRAY_DEFAULT_FUNC(name) \
-			muBool name##_comp(name t0, name t1) { \
-				return t0.active == t1.active; \
-			} \
-			\
-			void name##_on_creation(name* p) { \
-				if (p != MU_NULL_PTR) { \
-					MU_LOCK_CREATE(p->lock, p->lock_active) \
-				} \
-			} \
-			void name##_on_destruction(name* p) { \
-				if (p != MU_NULL_PTR) { \
-					MU_LOCK_DESTROY(p->lock, p->lock_active) \
-				} \
-			} \
-			void name##_on_hold(name* p) { \
-				if (p != MU_NULL_PTR) { \
-					MU_LOCK_LOCK(p->lock, p->lock_active) \
-				} \
-			} \
-			void name##_on_release(name* p) { \
-				if (p != MU_NULL_PTR) { \
-					MU_LOCK_UNLOCK(p->lock, p->lock_active) \
-				} \
-			} \
-			\
-			mu_dynamic_hrarray_declaration( \
-				name##_array, name, name##_, name##_comp, \
-				name##_on_creation, name##_on_destruction, name##_on_hold, name##_on_release \
-			)
-
-		#define MU_SAFEFUNC(result, lib_prefix, context, fail_return) \
-			MU_SET_RESULT(result, lib_prefix##SUCCESS) \
-			MU_ASSERT(context != MU_NULL_PTR, result, lib_prefix##NOT_YET_INITIALIZED, fail_return) \
-
-		#define MU_HOLD(result, item, da, context, lib_prefix, fail_return, da_prefix) \
-			MU_ASSERT(item < da.length, result, lib_prefix##INVALID_ID, fail_return) \
-			da_prefix##hold_element(0, &da, item); \
-			MU_ASSERT(da.data[item].active, result, lib_prefix##INVALID_ID, da_prefix##release_element(0, &da, item); fail_return)
-
-		#define MU_RELEASE(da, item, da_prefix) \
-			da_prefix##release_element(0, &da, item);
-
-	#ifdef __cplusplus
-	}
-	#endif
-
-#endif /* MUU_H */
-
 #ifndef MAUF_H
 	#define MUAF_H
+
+	/* muUtility version 1.0.0 header */
+	
+		#if !defined(MU_CHECK_VERSION_MISMATCHING) && defined(MUU_H) && \
+			(MUU_VERSION_MAJOR != 1 || MUU_VERSION_MINOR != 0 || MUU_VERSION_PATCH != 0)
+
+			#pragma message("[MUAF] muUtility's header has already been defined, but version doesn't match the version that this library is built for. This may lead to errors, warnings, or unexpected behavior. Define MU_CHECK_VERSION_MISMATCHING before this to turn off this message.")
+
+		#endif
+
+		#ifndef MUU_H
+			#define MUU_H
+			
+			#if !defined(MU_SECURE_WARNINGS) && !defined(_CRT_SECURE_NO_WARNINGS)
+				#define _CRT_SECURE_NO_WARNINGS
+			#endif
+
+			#ifdef __cplusplus
+			extern "C" { // }
+			#endif
+
+			#define MUU_VERSION_MAJOR 1
+			#define MUU_VERSION_MINOR 0
+			#define MUU_VERSION_PATCH 0
+
+			/* C standard library dependencies */
+
+				#if !defined(int8_m)      || \
+					!defined(uint8_m)     || \
+					!defined(int16_m)     || \
+					!defined(uint16_m)    || \
+					!defined(int32_m)     || \
+					!defined(uint32_m)    || \
+					!defined(int64_m)     || \
+					!defined(uint64_m)    || \
+					!defined(MU_SIZE_MAX)
+
+					#define __STDC_LIMIT_MACROS
+					#define __STDC_CONSTANT_MACROS
+					#include <stdint.h>
+
+					#ifndef int8_m
+						#ifdef INT8_MAX
+							#define int8_m int8_t
+						#else
+							#define int8_m char
+						#endif
+					#endif
+
+					#ifndef uint8_m
+						#ifdef UINT8_MAX
+							#define uint8_m uint8_t
+						#else
+							#define uint8_m unsigned char
+						#endif
+					#endif
+
+					#ifndef int16_m
+						#ifdef INT16_MAX
+							#define int16_m int16_t
+						#else
+							#define int16_m short
+						#endif
+					#endif
+
+					#ifndef uint16_m
+						#ifdef UINT16_MAX
+							#define uint16_m uint16_t
+						#else
+							#define uint16_m unsigned short
+						#endif
+					#endif
+
+					#ifndef int32_m
+						#ifdef INT32_MAX
+							#define int32_m int32_t
+						#else
+							#define int32_m long
+						#endif
+					#endif
+
+					#ifndef uint32_m
+						#ifdef UINT32_MAX
+							#define uint32_m uint32_t
+						#else
+							#define uint32_m unsigned long
+						#endif
+					#endif
+
+					#ifndef int64_m
+						#ifdef INT64_MAX
+							#define int64_m int64_t
+						#else
+							#define int64_m long long
+						#endif
+					#endif
+
+					#ifndef uint64_m
+						#ifdef UINT64_MAX
+							#define uint64_m uint64_t
+						#else
+							#define uint64_m unsigned long long
+						#endif
+					#endif
+
+					#ifndef MU_SIZE_MAX
+						#define MU_SIZE_MAX SIZE_MAX
+					#endif
+
+				#endif
+
+				#if !defined(size_m)
+
+					#include <stddef.h>
+
+					#ifndef size_m
+						#define size_m size_t
+					#endif
+
+				#endif
+
+				#if !defined(muBool)   || \
+					!defined(MU_TRUE)  || \
+					!defined(MU_FALSE)
+
+					#include <stdbool.h>
+
+					#ifndef muBool
+						#define muBool bool
+					#endif
+
+					#ifndef MU_TRUE
+						#define MU_TRUE true
+					#endif
+
+					#ifndef MU_FALSE
+						#define MU_FALSE false
+					#endif
+
+				#endif
+
+			/* Useful macros */
+
+				#ifndef MUDEF
+					#ifdef MU_STATIC
+						#define MUDEF static
+					#else
+						#define MUDEF extern
+					#endif
+				#endif
+
+				#ifndef MU_ZERO_STRUCT
+					#ifdef __cplusplus
+						#define MU_ZERO_STRUCT(s) {}
+					#else
+						#define MU_ZERO_STRUCT(s) (s){0}
+					#endif
+				#endif
+
+				#ifndef MU_ZERO_STRUCT_CONST
+					#ifdef __cplusplus
+						#define MU_ZERO_STRUCT_CONST(s) {}
+					#else
+						#define MU_ZERO_STRUCT_CONST(s) {0}
+					#endif
+				#endif
+
+				#ifndef muByte
+					#define muByte uint8_m
+				#endif
+
+				#ifndef mu_rle_uint8
+					#define mu_rle_uint8(b) ((uint8_m)b[0] << 0)
+				#endif
+				#ifndef mu_rbe_uint8
+					#define mu_rbe_uint8(b) ((uint8_m)b[0] << 0)
+				#endif
+
+				#ifndef mu_rle_uint16
+					#define mu_rle_uint16(b) ((uint16_m)b[0] << 0 | (uint16_m)b[1] << 8)
+				#endif
+				#ifndef mu_rbe_uint16
+					#define mu_rbe_uint16(b) ((uint16_m)b[1] << 0 | (uint16_m)b[0] << 8)
+				#endif
+
+				#ifndef mu_rle_uint32
+					#define mu_rle_uint32(b) ((uint32_m)b[0] << 0 | (uint32_m)b[1] << 8 | (uint32_m)b[2] << 16 | (uint32_m)b[3] << 24)
+				#endif
+				#ifndef mu_rbe_uint32
+					#define mu_rbe_uint32(b) ((uint32_m)b[3] << 0 | (uint32_m)b[2] << 8 | (uint32_m)b[1] << 16 | (uint32_m)b[0] << 24)
+				#endif
+
+				#ifndef mu_rle_uint64
+					#define mu_rle_uint64(b) ((uint64_m)b[0] << 0 | (uint64_m)b[1] << 8 | (uint64_m)b[2] << 16 | (uint64_m)b[3] << 24 | (uint64_m)b[4] << 32 | (uint64_m)b[5] << 40 | (uint64_m)b[6] << 48 | (uint64_m)b[7] << 56)
+				#endif
+				#ifndef mu_rbe_uint64
+					#define mu_rbe_uint64(b) ((uint64_m)b[7] << 0 | (uint64_m)b[6] << 8 | (uint64_m)b[5] << 16 | (uint64_m)b[4] << 24 | (uint64_m)b[3] << 32 | (uint64_m)b[2] << 40 | (uint64_m)b[1] << 48 | (uint64_m)b[0] << 56)
+				#endif
+
+				#ifndef mu_wle_uint8
+					#define mu_wle_uint8(b, i) b[0] = (uint8_m)(i >> 0);
+				#endif
+				#ifndef mu_wbe_uint8
+					#define mu_wbe_uint8(b, i) b[0] = (uint8_m)(i >> 0);
+				#endif
+
+				#ifndef mu_wle_uint16
+					#define mu_wle_uint16(b, i) b[0] = (uint8_m)(i >> 0); b[1] = (uint8_m)(i >> 8);
+				#endif
+				#ifndef mu_wbe_uint16
+					#define mu_wbe_uint16(b, i) b[1] = (uint8_m)(i >> 0); b[0] = (uint8_m)(i >> 8);
+				#endif
+
+				#ifndef mu_wle_uint32
+					#define mu_wle_uint32(b, i) b[0] = (uint8_m)(i >> 0); b[1] = (uint8_m)(i >> 8); b[2] = (uint8_m)(i >> 16); b[3] = (uint8_m)(i >> 24);
+				#endif
+				#ifndef mu_wbe_uint32
+					#define mu_wbe_uint32(b, i) b[3] = (uint8_m)(i >> 0); b[2] = (uint8_m)(i >> 8); b[1] = (uint8_m)(i >> 16); b[0] = (uint8_m)(i >> 24);
+				#endif
+
+				#ifndef mu_wle_uint64
+					#define mu_wle_uint64(b, i) b[0] = (uint8_m)(i >> 0); b[1] = (uint8_m)(i >> 8); b[2] = (uint8_m)(i >> 16); b[3] = (uint8_m)(i >> 24); b[4] = (uint8_m)(i >> 32); b[5] = (uint8_m)(i >> 40); b[6] = (uint8_m)(i >> 48); b[7] = (uint8_m)(i >> 56);
+				#endif
+				#ifndef mu_wbe_uint64
+					#define mu_wbe_uint64(b, i) b[7] = (uint8_m)(i >> 0); b[6] = (uint8_m)(i >> 8); b[5] = (uint8_m)(i >> 16); b[4] = (uint8_m)(i >> 24); b[3] = (uint8_m)(i >> 32); b[2] = (uint8_m)(i >> 40); b[1] = (uint8_m)(i >> 48); b[0] = (uint8_m)(i >> 56);
+				#endif
+
+				#ifndef MU_NULL_PTR
+					#define MU_NULL_PTR 0
+				#endif
+
+				#ifndef MU_NULL
+					#define MU_NULL 0
+				#endif
+
+				#ifndef MU_NONE
+					#define MU_NONE MU_SIZE_MAX
+				#endif
+
+				#ifndef MU_SET_RESULT
+					#define MU_SET_RESULT(res, val) if(res!=MU_NULL_PTR){*res=val;}
+				#endif
+
+				#ifndef MU_ASSERT
+					#define MU_ASSERT(cond, res, val, after) if(!(cond)){MU_SET_RESULT(res, val) after}
+				#endif
+
+				#define MU_ENUM(name, ...) enum _##name{__VA_ARGS__};typedef enum _##name _##name; typedef size_m name;
+
+				#if !defined(MU_WIN32) && !defined(MU_UNIX)
+					#if defined(WIN32) || defined(_WIN32)
+						#define MU_WIN32
+					#elif defined(__unix__) || (defined(__APPLE__) && defined(__MACH__))
+						#define MU_UNIX
+					#endif
+				#endif
+
+				#define MU_HRARRAY_DEFAULT_FUNC(name) \
+					muBool name##_comp(name t0, name t1) { \
+						return t0.active == t1.active; \
+					} \
+					\
+					void name##_on_creation(name* p) { \
+						if (p != MU_NULL_PTR) { \
+							MU_LOCK_CREATE(p->lock, p->lock_active) \
+						} \
+					} \
+					void name##_on_destruction(name* p) { \
+						if (p != MU_NULL_PTR) { \
+							MU_LOCK_DESTROY(p->lock, p->lock_active) \
+						} \
+					} \
+					void name##_on_hold(name* p) { \
+						if (p != MU_NULL_PTR) { \
+							MU_LOCK_LOCK(p->lock, p->lock_active) \
+						} \
+					} \
+					void name##_on_release(name* p) { \
+						if (p != MU_NULL_PTR) { \
+							MU_LOCK_UNLOCK(p->lock, p->lock_active) \
+						} \
+					} \
+					\
+					mu_dynamic_hrarray_declaration( \
+						name##_array, name, name##_, name##_comp, \
+						name##_on_creation, name##_on_destruction, name##_on_hold, name##_on_release \
+					)
+
+				#define MU_SAFEFUNC(result, lib_prefix, context, fail_return) \
+					MU_SET_RESULT(result, lib_prefix##SUCCESS) \
+					MU_ASSERT(context != MU_NULL_PTR, result, lib_prefix##NOT_YET_INITIALIZED, fail_return) \
+
+				#define MU_HOLD(result, item, da, context, lib_prefix, fail_return, da_prefix) \
+					MU_ASSERT(item < da.length, result, lib_prefix##INVALID_ID, fail_return) \
+					da_prefix##hold_element(0, &da, item); \
+					MU_ASSERT(da.data[item].active, result, lib_prefix##INVALID_ID, da_prefix##release_element(0, &da, item); fail_return)
+
+				#define MU_RELEASE(da, item, da_prefix) \
+					da_prefix##release_element(0, &da, item);
+
+			#ifdef __cplusplus
+			}
+			#endif
+
+		#endif /* MUU_H */
 
 	#ifdef __cplusplus
 	extern "C" { // }
@@ -556,6 +558,18 @@ leads to undefined behavior per audio file format.
 #endif /* MAUF_H */
 
 #ifdef MUAF_IMPLEMENTATION
+
+	/* muUtility version 1.0.0 implementation */
+
+		#ifndef MUU_IMPLEMENTATION
+			#define MUU_IMPLEMENTATION
+
+			#ifdef MUU_IMPLEMENTATION
+	
+				// ...
+
+			#endif /* MUU_IMPLEMENTATION */
+		#endif
 
 	#ifdef __cplusplus
 	extern "C" { // }
