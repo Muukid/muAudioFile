@@ -59,9 +59,9 @@ muaf has a dependency on:
 
 > Note that mu libraries store their dependencies within their files, so you don't need to import these dependencies yourself; this section's purpose is purely to provide more information about the contents that this file defines. The libraries listed may also have other dependencies that they also include that aren't explicitly listed here.
 
-# Format-inspecific API
+# Format-inspecific reading API
 
-muaf's API is split into two sections: the format-specific API, and the format-inspecific API. The inspecific API wraps around the specific API, encapsulating the specific API's functionality, and allowing you to retrieve general information about an audio file without having to directly consider what specific audio file format it is.
+muaf's reading API is split into two sections: the format-specific API, and the format-inspecific API. The inspecific API wraps around the specific API, encapsulating the specific API's functionality, and allowing you to retrieve general information about an audio file without having to directly consider what specific audio file format it is.
 
 ## Audio profile
 
@@ -93,21 +93,52 @@ MUDEF void mu_free_audio_file_profile(muafInspecificProfile* profile);
 
 The inspecific profile is represented by the struct `muafInspecificProfile`, which has the following members:
 
-* `muafSampleCount num_samples` - the number of samples.
+* `muafFrameCount num_frames` - the number of frames.
 
-* `muafSampleRate sample_rate` - the rate of samples per second.
+* `muafFrameRate sample_rate` - the amount of samples that should be played every second per channel.
 
-* `muafChannels num_channels` - the number of channels.
+* `muafChannels num_channels` - the number of samples per frame.
 
-* `muafFormat file_format` - the [file format](#audio-file-formats).
+* `muafAudioFormat audio_format` - the [audio format](#audio-formats).
+
+* `muafFileFormat file_format` - the [file format](#audio-file-formats).
 
 * `muafSpecificProfile specific` - the [format-specific profile](#format-specific-profile).
 
+### Audio formats
+
+The type `muafAudioFormat` represents an audio format supported in muaf, and has the following defined values:
+
+* `MUAF_FORMAT_UNKNOWN` - unknown or unsupported audio format.
+
+#### PCM audio formats
+
+* `MUAF_FORMAT_PCM_U8` - unsigned 8-bit PCM (range 0 to 255, 0x00 to 0xFF). Corresponding type is `uint8_m`.
+
+* `MUAF_FORMAT_PCM_S16` - signed 16-bit PCM (range -32768 to 32767, -0x8000 to 0x7FFF). Corresponding type is `int16_m`.
+
+* `MUAF_FORMAT_PCM_S32` - signed 32-bit PCM (range -2147483648 to 2147483647, -0x80000000 to 0x7FFFFFFF). Corresponding type is `int32_m`.
+
+* `MUAF_FORMAT_PCM_S64` - signed 64-bit PCM (range -9223372036854775808 to 9223372036854775807, -0x8000000000000000 to 0x7FFFFFFFFFFFFFFF). Corresponding type is `int64_m`.
+
+#### Audio format names
+
+The name function `muaf_audio_format_get_name` returns a `const char*` representation of a given audio format (for example, `MUAF_FORMAT_PCM_U8` returns "MUAF_FORMAT_PCM_U8"), defined below: 
+
+```c
+MUDEF const char* muaf_audio_format_get_name(muafAudioFormat format);
+```
+
+
+This function returns "MUAF_FORMAT_UNKNOWN" in the case that `format` is an unrecognized value.
+
+> This function is a "name" function, and therefore is only defined if `MUAF_NAMES` is also defined.
+
 ### Audio file formats
 
-The type `muafFormat` represents a file format supported in muaf, and has the following defined values:
+The type `muafFileFormat` represents a file format supported in muaf, and has the following defined values:
 
-* `MUAF_UNKNOWN` - an unknown/unrecognized file format.
+* `MUAF_UNKNOWN` - an unknown and/or unrecognized file format.
 
 * `MUAF_WAVE` - the [WAVE file format](#wave-api).
 
@@ -122,11 +153,22 @@ The union `muafSpecificProfile` acts as a container for the format-specific prof
 The function `mu_audio_file_format` retrieves the [audio file format](#audio-file-formats) of a given file, defined below: 
 
 ```c
-MUDEF muafFormat mu_audio_file_format(const char* filename);
+MUDEF muafFileFormat mu_audio_file_format(const char* filename);
 ```
 
 
 This function does not use the filename extension to identify the audio file format, but instead, the actual contents of the file itself. This function returns `MUAF_UNKNOWN` if rather the audio file format could not be identified to be anything supported in muaf, or muaf failed to retrieve the file's data.
+
+## Read raw audio frames
+
+The function `mu_read_audio_file_frames` reads raw audio file frames from an audio file, defined below: 
+
+```c
+MUDEF muafResult mu_read_audio_file_frames(const char* filename, muafInspecificProfile* profile, size_m beg_frame, size_m frame_len, void* data);
+```
+
+
+The profile given must be a valid loaded profile from a file that has gone unchanged since the profile was initially loaded. The frame range provided must be valid; this function does not check if the given frame range is valid. The given data must match the corresponding type of the profile's audio format (which itself must be a supported and defined value for `muafAudioFormat`), and `data` must be large enough to hold the requested amount of frames.
 
 # WAVE API
 
@@ -154,7 +196,7 @@ The struct `muWAVEProfile` represents the audio file profile of a WAVE file, and
 
 * `uint16_m channels` - the value of wChannels in fmt's common-fields; the number of channels.
 
-* `uint32_m samples_per_sec` - the value of dwSamplesPerSec in fmt's common-fields; the sampling rate.
+* `uint32_m samples_per_sec` - the value of dwSamplesPerSec in fmt's common-fields; the sample rate.
 
 * `uint32_m avg_bytes_per_sec` - the value of dwAvgBytesPerSec in fmt's common-fields; used for buffer estimation.
 
@@ -180,7 +222,7 @@ The WAVE PCM format represents the wFormatTag value WAVE_FORMAT_PCM, Microsoft's
 
 This format does store data in the [format-specific-fields portion of the fmt chunk](#wave-format-specific-fields). This data is represented by the struct `muWAVEPCM`, which has the following member:
 
-* `uint16_m bits_per_sample` - the value of wBitsPerSample in format-specific-fields's PCM-format-specific form; the sample size.
+* `uint16_m bits_per_sample` - the value of wBitsPerSample in format-specific-fields's PCM-format-specific form; the size of each sample, in bits.
 
 ### WAVE format names
 
@@ -231,6 +273,81 @@ A specification-compliant WAVE file will always have the chunks fmt-ck and wave-
 
 Additionally, WAVE's specifications list chunks in a specific order (fmt-ck, fact-ck, cue-ck, playlist-ck, assoc-data-list, wave-data), but I am unaware if they necessarily *need* to be in this order (besides the previously mentioned rule that fmt-ck occurs before wave-data), so muaf permits WAVE files to have any chunks in any order, as long as fmt-ck and wave-data appear at some point. muaf writes WAVE files in the specified order, though.
 
+## Reading WAVE audio data
+
+This section covers the functionality for reading WAVE audio data.
+
+### Read raw WAVE audio frames
+
+The function `mu_WAVE_read_audio_file_frames` reads raw audio file frames from a WAVE audio file, defined below: 
+
+```c
+MUDEF muafResult mu_WAVE_read_audio_file_frames(const char* filename, muWAVEProfile* profile, size_m beg_frame, size_m frame_len, void* data);
+```
+
+
+The [WAVE format of the profile](#wave-formats) must have a supported [inspecific audio format](#audio-formats) equivalent; AKA, a [conversion from the profile's WAVE format to its inspecific audio format equivalent](#wave-format-to-inspecific-audio-format) must not return `MUAF_FORMAT_UNKNOWN`. Listed limitations from [the inspecific function to read raw audio frames](#read-raw-audio-frames) apply.
+
+### WAVE format to inspecific audio format
+
+The function `mu_WAVE_inspecific_audio_format` converts a WAVE audio format to its supported [inspecific audio format](#audio-formats) equivalent, which muaf can then generally work with, defined below: 
+
+```c
+MUDEF muafAudioFormat mu_WAVE_inspecific_audio_format(uint16_m format_tag, muWAVEFormatSpecificFields specific_fields);
+```
+
+
+If this function returns `MUAF_FORMAT_UNKNOWN`, then the given WAVE audio format information is unrecognized and/or unsupported, and muaf is unable to extract the data from it.
+
+## Writing WAVE audio data
+
+This section covers the functionality for writing WAVE audio data.
+
+### Create WAVE wrapper
+
+The function `mu_WAVE_create_wrapper` creates a WAVE file given WAVE wrapper information, defined below: 
+
+```c
+MUDEF muafResult mu_WAVE_create_wrapper(const char* filename, muWAVEWrapper* wrapper);
+```
+
+
+The struct `muWAVEWrapper` represents a WAVE file wrapper, and has the following members:
+
+* `muafAudioFormat audio_format` - the [audio format](#audio-formats) of the WAVE file.
+
+* `uint32_m frame_count` - the amount of frames in the WAVE file.
+
+* `uint16_m num_channels` - the number of samples per frame.
+
+* `uint32_m sample_rate` - the amount of samples that should be played every second per channel.
+
+* `muWAVEChunks chunks` - the location of the chunks in the audio file. This is used internally, and should not be filled in by the user.
+
+### Write raw WAVE audio frames
+
+The function `mu_WAVE_write_audio_file_frames` writes raw audio file frames to a WAVE audio file, defined below: 
+
+```c
+MUDEF muafResult mu_WAVE_write_audio_file_frames(const char* filename, muWAVEWrapper* wrapper, size_m beg_frame, size_m frame_len, void* data);
+```
+
+
+The given wrapper and file must have their contents unaltered from their original call to [`mu_WAVE_create_wrapper`](#create-wave-wrapper), and the given audio data `data` must match the format of the WAVE file.
+
+### Get WAVE wrapper from audio file
+
+The function `mu_WAVE_get_wrapper` fills in information for a WAVE wrapper based on the contents of another WAVE file, defined below: 
+
+```c
+MUDEF muafResult mu_WAVE_get_wrapper(muWAVEProfile* profile, muWAVEWrapper* wrapper);
+```
+
+
+`profile` should be [retrieved beforehand](#wave-profile) from an existing file, and the given audio file should have [a supported inspecific audio format equivalent](#wave-format-to-inspecific-audio-format).
+
+The members of `wrapper` will be filled in based on the given audio file, except for the members used internally.
+
 ## WAVE known bugs and limitations
 
 This section covers the known bugs and limitations for the implementation of WAVE in muaf.
@@ -259,6 +376,10 @@ The following values are defined for `muafResult` (all values not explicitly sta
 
 * `MUAF_FAILED_OPEN_FILE` - an attempt to open the file failed.
 
+* `MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT` - the task could not be completed due to the file being in an audio format that muaf does not support.
+
+* `MUAF_FAILED_CREATE_FILE` - an attempt to create the file failed.
+
 ### WAVE result values
 
 * `MUAF_INVALID_WAVE_CHUNK_LENGTH_FOR_FILE` - a WAVE chunk has a recorded length that is out of range for the file's actual length.
@@ -273,9 +394,11 @@ The following values are defined for `muafResult` (all values not explicitly sta
 
 * `MUAF_INVALID_WAVE_FMT_SAMPLES_PER_SEC` - the WAVE chunk fmt-ck's value 'dwSamplesPerSec' has an invalid value of 0.
 
-* `MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE` - the WAVE chunk fmt-ck's PCM-format-specific value 'wBitsPerSample' has an invalid value; it's rather equal to 0, non-divisible by 8 without a remainder, or doesn't align with the value for wBlockAlign.
+* `MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE` - the WAVE chunk fmt-ck's PCM-format-specific value 'wBitsPerSample' has an invalid value; it's rather equal to 0, non-divisible by 8 without a remainder, doesn't evenly divide the length of the wave data, or doesn't align with the value for wBlockAlign.
 
 * `MUAF_FAILED_WAVE_IDENTIFICATION` - an attempt to retrieve WAVE information from a file that doesn't appear to be a WAVE file has occurred.
+
+* `MUAF_INVALID_WAVE_FILE_WRITE_SIZE` - the WAVE file could not be created, as the size of the WAVE file would be over the maximum file size of a WAVE file due to any of the limitations of how big certain values can be encoded in WAVE (such as the ckSize for the RIFF chunk).
 
 ## Check if result is fatal
 
@@ -323,6 +446,10 @@ muaf has several C standard library dependencies, all of which are overridable b
 
 * `mu_ftell` - equivalent to `ftell`.
 
+* `mu_fputc` - equivalent to `fputc`.
+
+* `mu_fwrite` - equivalent to `fwrite`.
+
 ## `stdlib.h` dependencies
 
 * `mu_malloc` - equivalent to `malloc`.
@@ -332,3 +459,5 @@ muaf has several C standard library dependencies, all of which are overridable b
 ## `string.h` dependencies
 
 * `mu_memset` - equivalent to `memset`.
+
+* `mu_memcpy` - equivalent to `memcpy`.

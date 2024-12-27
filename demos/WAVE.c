@@ -5,15 +5,18 @@
 DEMO NAME:          WAVE.c
 DEMO WRITTEN BY:    Muukid
 CREATION DATE:      2024-12-25
-LAST UPDATED:       2024-12-25
+LAST UPDATED:       2024-12-27
 
 ============================================================
                         DEMO PURPOSE
 
-This demo tests reading information from a WAVE file.
+This demo tests reading and information from a WAVE file to
+another. This is tested by creating a copy of another WAVE
+file, but with its audio in reverse.
 
 This demo is dependent on the 'resources' folder within the
-demos folder.
+demos folder. It is also dependent on the folder 'output'
+existing within the executing directory of the program.
 
 ============================================================
                         LICENSE INFO
@@ -36,6 +39,10 @@ More explicit license information at the end of file.
 	#include <stdio.h>
 	// For print types:
 	#include <inttypes.h>
+	// For allocation:
+	#include <stdlib.h>
+	// For memory functions:
+	#include <string.h>
 
 /* Resources */
 
@@ -85,7 +92,7 @@ int main(void)
 	}
 
 	// Print WAVE profile basic fmt info
-	printf("\n== Basic fmt info==\n");
+	printf("\n== Basic fmt info ==\n");
 	printf("Format tag \t- %" PRIu16 " (%s)\n", profile.format_tag, mu_WAVE_format_get_name(profile.format_tag));
 	printf("Channels \t- %" PRIu16 "\n", profile.channels);
 	printf("Samples per sec \t- %" PRIu32 "Hz\n", profile.samples_per_sec);
@@ -103,6 +110,92 @@ int main(void)
 		} break;
 	}
 
+	printf("\n== Write info ==\n");
+
+	// Get inspecific audio format
+	muafAudioFormat audio_format = mu_WAVE_inspecific_audio_format(profile.format_tag, profile.specific_fields);
+	printf("muaf format - %s\n", muaf_audio_format_get_name(audio_format));
+	// Return if unsupported
+	if (audio_format == MUAF_FORMAT_UNKNOWN) {
+		printf("Unknown, exiting...\n");
+		mu_free_WAVE_profile(&profile);
+		return 0;
+	}
+
+	// Get WAVE wrapper based on this file
+	printf("Getting wrapper...\n");
+	muWAVEWrapper wrapper;
+	res = mu_WAVE_get_wrapper(&profile, &wrapper);
+	if (res != MUAF_SUCCESS) {
+		printf("Non-successful result - %s", muaf_result_get_name(res));
+		if (muaf_result_is_fatal(res)) {
+			printf(" (fatal; exiting)\n");
+			mu_free_WAVE_profile(&profile);
+			return -1;
+		}
+	}
+
+	// Write WAVE wrapper
+	printf("Writing wave wrapper to 'output/test_out.wav'...\n");
+	res = mu_WAVE_create_wrapper("output/test_out.wav", &wrapper);
+	if (res != MUAF_SUCCESS) {
+		printf("Non-successful result - %s", muaf_result_get_name(res));
+		if (muaf_result_is_fatal(res)) {
+			printf(" (fatal; exiting)\n");
+			mu_free_WAVE_profile(&profile);
+			return -1;
+		}
+	}
+
+	// Extract audio data from file
+	printf("Extracting audio data...\n");
+	// - Allocate data
+	muByte* audio_data = (muByte*)malloc(((size_m)wrapper.frame_count) * ((size_m)profile.block_align));
+	if (!audio_data) {
+		printf("Failed to allocate data; exiting\n");
+		mu_free_WAVE_profile(&profile);
+		return -1;
+	}
+	// - Read frames
+	res = mu_WAVE_read_audio_file_frames("resources/test.wav", &profile, 0, wrapper.frame_count, (void*)audio_data);
+	if (res != MUAF_SUCCESS) {
+		printf("Non-successful result - %s", muaf_result_get_name(res));
+		if (muaf_result_is_fatal(res)) {
+			printf(" (fatal; exiting)\n");
+			free(audio_data);
+			mu_free_WAVE_profile(&profile);
+			return -1;
+		}
+	}
+
+	// Reverse each frame
+	printf("Reversing frames...\n");
+	uint32_m frame_count = wrapper.frame_count / 2;
+	for (uint32_m f = 0; f < frame_count; ++f) {
+		// Get current sample
+		muByte frame[2048];
+		memcpy(frame, &audio_data[f*profile.block_align], profile.block_align);
+		// Copy reverse equivalent frame
+		memcpy(&audio_data[f*profile.block_align], &audio_data[(wrapper.frame_count-f-1)*profile.block_align], profile.block_align);
+		// Copy current sample to reverse equivalent
+		memcpy(&audio_data[(wrapper.frame_count-f-1)*profile.block_align], frame, profile.block_align);
+	}
+
+	// Write audio data to new file
+	printf("Copying audio data to 'output/test_out.wav'...\n");
+	res = mu_WAVE_write_audio_file_frames("output/test_out.wav", &wrapper, 0, wrapper.frame_count, (void*)audio_data);
+	if (res != MUAF_SUCCESS) {
+		printf("Non-successful result - %s", muaf_result_get_name(res));
+		if (muaf_result_is_fatal(res)) {
+			printf(" (fatal; exiting)\n");
+			free(audio_data);
+			mu_free_WAVE_profile(&profile);
+			return -1;
+		}
+	}
+
+	// Free extracted audio data
+	free(audio_data);
 	// Free wave profile
 	mu_free_WAVE_profile(&profile);
 
