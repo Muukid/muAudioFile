@@ -2,17 +2,17 @@
 ============================================================
                         DEMO INFO
 
-DEMO NAME:          WAVE.c
+DEMO NAME:          audio.c
 DEMO WRITTEN BY:    Muukid
-CREATION DATE:      2024-12-25
+CREATION DATE:      2024-12-29
 LAST UPDATED:       2024-12-29
 
 ============================================================
                         DEMO PURPOSE
 
-This demo tests reading and information from a WAVE file to
-another. This is tested by creating a copy of another WAVE
-file, but with its audio in reverse.
+This demo tests reading and information from an audio file
+to another. This is tested by creating a copy of another
+audio file, but with its audio in reverse.
 
 This demo is dependent on the 'resources' folder within the
 demos folder. It is also dependent on the folder 'output'
@@ -49,14 +49,19 @@ More explicit license information at the end of file.
 	// Result value holder
 	muafResult res;
 
-	// WAVE profile
-	muWAVEProfile profile;
+	// Audio profile
+	muafInspecificProfile profile;
+
+	// Data read from the audio file
+	muByte* data;
+	// Size of data
+	size_m data_size;
 
 int main(void)
 {
-	// Get WAVE profile
-	printf("Getting WAVE profile of 'resources/test.wav'...\n");
-	res = mu_get_WAVE_profile("resources/test.wav", &profile);
+	// Get profile
+	printf("Getting profile of 'resources/test_audio'...\n");
+	res = mu_get_audio_file_profile("resources/test_audio", &profile);
 	if (res != MUAF_SUCCESS) {
 		printf("Non-successful result - %s", muaf_result_get_name(res));
 		if (muaf_result_is_fatal(res)) {
@@ -67,126 +72,86 @@ int main(void)
 	}
 	printf("Retrieved\n");
 
-	// Print chunk info
-	printf("\n== Chunk info ==\n");
-	printf("fmt \t- at byte %zu,\t length %" PRIu32 "\n", profile.chunks.fmt, profile.chunks.fmt_len);
-	printf("wave \t- at byte %zu,\t length %" PRIu32 "\n", profile.chunks.wave, profile.chunks.wave_len);
-	if (profile.chunks.fact == 0) {
-		printf("fact \t- NA\n");
-	} else {
-		printf("fact \t- at byte %zu,\t length %" PRIu32 "\n", profile.chunks.fact, profile.chunks.fact_len);
-	}
-	if (profile.chunks.cue == 0) {
-		printf("cue \t- NA\n");
-	} else {
-		printf("cue \t- at byte %zu,\t length %" PRIu32 "\n", profile.chunks.cue, profile.chunks.cue_len);
-	}
-	if (profile.chunks.playlist == 0) {
-		printf("playlist \t- NA\n");
-	} else {
-		printf("playlist \t- at byte %zu,\t length %" PRIu32 "\n", profile.chunks.playlist, profile.chunks.playlist_len);
-	}
-	if (profile.chunks.assoc_data == 0) {
-		printf("assoc-data \t- NA\n");
-	} else {
-		printf("assoc-data \t- at byte %zu,\t length %" PRIu32 "\n", profile.chunks.assoc_data, profile.chunks.assoc_data_len);
-	}
+	// Print profile information
+	printf("\n== Profile info ==\n");
+	printf("Frame count \t- %" PRIu64 "\n", profile.num_frames);
+	printf("Sample rate \t- %" PRIu32 "\n", profile.sample_rate);
+	printf("Channels \t- %" PRIu16 "\n", profile.num_channels);
+	printf("Audio format \t- %s\n", muaf_audio_format_get_nice_name(profile.audio_format));
+	printf("File format \t- %s\n", muaf_audio_file_format_get_nice_name(profile.file_format));
 
-	// Print WAVE profile basic fmt info
-	printf("\n== Basic fmt info ==\n");
-	printf("Format tag \t- %" PRIu16 " (%s)\n", profile.format_tag, mu_WAVE_format_get_name(profile.format_tag));
-	printf("Channels \t- %" PRIu16 "\n", profile.channels);
-	printf("Samples per sec \t- %" PRIu32 "Hz\n", profile.samples_per_sec);
-	printf("Avg. bytes per sec \t- %" PRIu32 "\n", profile.avg_bytes_per_sec);
-	printf("Block align \t- %" PRIu16 "\n", profile.block_align);
-
-	// Print WAVE format specific fields
-	printf("\n== WAVE format specific fields ==\n");
-	switch (profile.format_tag) {
-		default: printf("NA\n"); break;
-
-		// WAVE PCM
-		case MU_WAVE_FORMAT_PCM: {
-			printf("Bits per sample \t- %" PRIu16 "\n", profile.specific_fields.wave_pcm->bits_per_sample);
-		} break;
+	// Do not continue if audio format is unrecognized
+	if (profile.audio_format == MUAF_FORMAT_UNKNOWN) {
+		printf("Unrecognized/Unsupported audio format; exiting\n");
+		mu_free_audio_file_profile(&profile);
+		return -1;
 	}
 
 	printf("\n== Write info ==\n");
 
-	// Get inspecific audio format
-	muafAudioFormat audio_format = mu_WAVE_inspecific_audio_format(profile.format_tag, profile.specific_fields);
-	printf("muaf format - %s\n", muaf_audio_format_get_name(audio_format));
-	// Return if unsupported
-	if (audio_format == MUAF_FORMAT_UNKNOWN) {
-		printf("Unknown, exiting...\n");
-		mu_free_WAVE_profile(&profile);
-		return -1;
-	}
-
-	// Get WAVE wrapper based on this file
+	// Get wrapper based on this file
 	printf("Getting wrapper...\n");
-	muWAVEWrapper wrapper;
-	res = mu_get_WAVE_wrapper(&profile, &wrapper);
+	muafInspecificWrapper wrapper;
+	res = mu_get_audio_file_wrapper(&profile, &wrapper);
 	if (res != MUAF_SUCCESS) {
 		printf("Non-successful result - %s", muaf_result_get_name(res));
 		if (muaf_result_is_fatal(res)) {
 			printf(" (fatal; exiting)\n");
-			mu_free_WAVE_profile(&profile);
+			mu_free_audio_file_profile(&profile);
 			return -1;
 		}
 		printf("\n");
 	}
 
-	// Write WAVE wrapper
-	printf("Writing wave wrapper to 'output/test_out.wav'...\n");
-	res = mu_create_WAVE_wrapper("output/test_out.wav", &wrapper);
+	// Write wrapper
+	printf("Writing wrapper to 'output/test_audio_out'...\n");
+	res = mu_create_audio_file_wrapper("output/test_audio_out", &wrapper);
 	if (res != MUAF_SUCCESS) {
 		printf("Non-successful result - %s", muaf_result_get_name(res));
 		if (muaf_result_is_fatal(res)) {
 			printf(" (fatal; exiting)\n");
-			mu_free_WAVE_profile(&profile);
+			mu_free_audio_file_profile(&profile);
 			return -1;
 		}
 		printf("\n");
 	}
 
-	// Extract audio data from file
+	// Extract audio data
 	printf("Extracting audio data...\n");
 	muByte* audio_data; // (Holder for decompressed data)
 	size_m frame_size; // (Holder for frame size)
 	// - Uncompressed
-	if (!muaf_audio_format_compressed(audio_format)) {
+	if (!muaf_audio_format_compressed(profile.audio_format)) {
 		// Calculate frame size
-		frame_size = muaf_audio_format_sample_size(audio_format) * ((size_m)profile.channels);
+		frame_size = muaf_audio_format_sample_size(profile.audio_format) * ((size_m)profile.num_channels);
 
 		// Allocate data
 		audio_data = (muByte*)malloc(frame_size * ((size_m)wrapper.num_frames));
 		if (!audio_data) {
 			printf("Failed to allocate data; exiting\n");
-			mu_free_WAVE_wrapper(&wrapper);
-			mu_free_WAVE_profile(&profile);
+			mu_free_audio_file_wrapper(&wrapper);
+			mu_free_audio_file_profile(&profile);
 			return -1;
 		}
 
 		// Read frames
-		res = mu_read_WAVE_uncompressed("resources/test.wav", &profile, 0, wrapper.num_frames, audio_data);
+		res = mu_read_uncompressed_audio_file("resources/test_audio", &profile, 0, wrapper.num_frames, audio_data);
 		if (res != MUAF_SUCCESS) {
-			printf("Non-successful result - %s", muaf_result_get_name(res));
+			printf("Non-succesful result - %s", muaf_result_get_name(res));
 			if (muaf_result_is_fatal(res)) {
 				printf(" (fatal; exiting)\n");
 				free(audio_data);
-				mu_free_WAVE_wrapper(&wrapper);
-				mu_free_WAVE_profile(&profile);
-				return -1;
+				mu_free_audio_file_wrapper(&wrapper);
+				mu_free_audio_file_profile(&profile);
 			}
 			printf("\n");
 		}
 	}
 	// - Compressed
 	else {
-		printf("Compressed audio format unsupported in this demo; exiting\n");
-		mu_free_WAVE_wrapper(&wrapper);
-		mu_free_WAVE_profile(&profile);
+		printf("Compressed audio formats unsupported in this demo; exiting\n");
+		mu_free_audio_file_wrapper(&wrapper);
+		mu_free_audio_file_profile(&profile);
 		return -1;
 	}
 
@@ -198,8 +163,8 @@ int main(void)
 	if (!frame) {
 		printf("Failed to allocate frame container; exiting\n");
 		free(audio_data);
-		mu_free_WAVE_wrapper(&wrapper);
-		mu_free_WAVE_profile(&profile);
+		mu_free_audio_file_wrapper(&wrapper);
+		mu_free_audio_file_profile(&profile);
 		return -1;
 	}
 
@@ -221,19 +186,18 @@ int main(void)
 	free(frame);
 
 	// Write audio data to new file
-	printf("Copying audio data to 'output/test_out.wav'...\n");
+	printf("Copying audio data to 'output/test_audio_out'...\n");
 	// - Uncompressed
-	if (!muaf_audio_format_compressed(audio_format)) {
+	if (!muaf_audio_format_compressed(profile.audio_format)) {
 		// Write uncompressed audio data
-		res = mu_write_WAVE_uncompressed("output/test_out.wav", &wrapper, 0, wrapper.num_frames, audio_data);
+		mu_write_uncompressed_audio_file("output/test_audio_out", &wrapper, 0, wrapper.num_frames, audio_data);
 		if (res != MUAF_SUCCESS) {
 			printf("Non-successful result - %s", muaf_result_get_name(res));
 			if (muaf_result_is_fatal(res)) {
 				printf(" (fatal; exiting)\n");
 				free(audio_data);
-				mu_free_WAVE_wrapper(&wrapper);
-				mu_free_WAVE_profile(&profile);
-				return -1;
+				mu_free_audio_file_wrapper(&wrapper);
+				mu_free_audio_file_profile(&profile);
 			}
 			printf("\n");
 		}
@@ -242,17 +206,16 @@ int main(void)
 	else {
 		printf("Compressed audio format unsupported in this demo; exiting\n");
 		free(audio_data);
-		mu_free_WAVE_wrapper(&wrapper);
-		mu_free_WAVE_profile(&profile);
-		return -1;
+		mu_free_audio_file_wrapper(&wrapper);
+		mu_free_audio_file_profile(&profile);
 	}
 
-	// Free extracted audio data
+	// Free audio data
 	free(audio_data);
-	// Free WAVE wrapper
-	mu_free_WAVE_wrapper(&wrapper);
-	// Free WAVE profile
-	mu_free_WAVE_profile(&profile);
+	// Free wrapper
+	mu_free_audio_file_wrapper(&wrapper);
+	// Free profile
+	mu_free_audio_file_profile(&profile);
 
 	printf("\nSuccessful\n");
 	return 0;

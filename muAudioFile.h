@@ -7,6 +7,8 @@ No warranty implied; use at your own risk.
 Licensed under MIT License or public domain, whichever you prefer.
 More explicit license information at the end of file.
 
+@TODO Overview section, not just terminology
+
 @DOCBEGIN
 
 # muAudioFile v1.0.0
@@ -835,6 +837,20 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 	typedef uint32_m muafResult;
 
+	// @DOCLINE # Terminology
+
+		// @DOCLINE This section provides a general overview of muaf's terminology in relation to audio and how audio data is handled in muaf, since a significant portion of audio terminology is not agreed upon.
+
+		// @DOCLINE The smallest unit of audio data is a '***sample***', which represents a single point of audio signal amplitude at one moment in time. In an audio file, multiple samples can be provided for the same moment in time in the form of '***channels***', which can be used for [stereo audio](https://en.wikipedia.org/wiki/Stereophonic_sound) and such. A '***frame***' contains each sample per channel, interleaved one after the other. So, if a frame had two samples it in, the first sample would be for channel 0, and the second sample would be for channel 1.
+
+		// @DOCLINE Audio files are expected to be played at a certain integer '***sample rate***', indicating how many samples *per channel* should be played each second. Since the sample rate value is based on one channel, the sample rate does not increase along with the amount of channels; the sample rate can more accurately described as the 'frame rate', as it more concisely indicates the amount of frames per second, but since the term 'frame rate' is already commonly associated with [video frame rate](https://en.wikipedia.org/wiki/Frame_rate), and the term 'sample rate' is fairly standardized, muaf uses the term 'sample rate'.
+
+		// @DOCLINE An '***audio format***' refers to how audio data can be laid out in a manner recognized and supported by muaf. In an '***uncompressed***' audio format, frames are simply stored one after the other chronologically, and in a type whose sample values are directly readable as an integer or decimal value in C. In a '***compressed***' audio format, frames are *not* stored one after the other, but instead are organized into '***packets***', which can contain any number of '***explicit or implicit frames***'. If frames are explicitly listed in a packet, that means that all frames' values are listed out one after the other in an uncompressed manner within that packet. If frames are implicitly listed, that means that some frames' values are not directly laid out in the data, but are instead implied based on other values, and need to be worked out manually to retrieve any readable frame data.
+
+		// @DOCLINE An audio file's '***raw data***' refers to the raw audio data based on the audio format. This means that, for example, if the audio format is compressed, the raw data describes the frames as they're listed in the data, explicit or implicit, leaving it to the user to work out the sample values for the frames manually if they are implicit.
+
+		// @DOCLINE An audio file's '***decompressed data***' refers to uncompressed audio data, whether or not it was generated from compressed or uncompressed audio data. If the given audio data's format is uncompressed, then the decompressed data simply refers to the raw data. However, if the given audio data's format is compressed, then the decompressed data refers to the raw data's equivalent uncompressed audio data. In other words, the decompressed data refers to the decompressed version of the raw data (whether or not it was compressed in the first place).
+
 	// @DOCLINE # Format-inspecific reading API
 
 		// @DOCLINE muaf's reading API is split into two sections: the format-specific API, and the format-inspecific API. The inspecific API wraps around the specific API, encapsulating the specific API's functionality, and allowing you to retrieve general information about an audio file without having to directly consider what specific audio file format it is.
@@ -869,21 +885,21 @@ Overall, muaf is okay with files not strictly complying with the specification w
 			};
 			typedef union muafSpecificProfile muafSpecificProfile;
 
-			typedef uint32_m muafFrameRate;
-			typedef uint64_m muafFrameCount;
+			typedef uint32_m muafSampleRate;
+			typedef uint64_m muafFrames;
 			typedef uint16_m muafChannels;
 			typedef uint8_m muafFileFormat;
 			typedef uint32_m muafAudioFormat;
 			struct muafInspecificProfile {
-				// @DOCLINE * `@NLFT num_frames` - the number of frames.
-				muafFrameCount num_frames;
-				// @DOCLINE * `@NLFT sample_rate` - the amount of samples that should be played every second per channel.
-				muafFrameRate sample_rate;
-				// @DOCLINE * `@NLFT num_channels` - the number of samples per frame.
+				// @DOCLINE * `@NLFT num_frames` - the number of frames (`@NLFT` typedef for `uint64_m`).
+				muafFrames num_frames;
+				// @DOCLINE * `@NLFT sample_rate` - the amount of samples that should be played every second per channel (`@NLFT` typedef for `uint32_m`).
+				muafSampleRate sample_rate;
+				// @DOCLINE * `@NLFT num_channels` - the number of channels (`@NLFT` typedef for `uint16_m`).
 				muafChannels num_channels;
-				// @DOCLINE * `@NLFT audio_format` - the [audio format](#audio-formats).
+				// @DOCLINE * `@NLFT audio_format` - the [audio format](#audio-formats) (`@NLFT` typedef for `uint32_m`).
 				muafAudioFormat audio_format;
-				// @DOCLINE * `@NLFT file_format` - the [file format](#audio-file-formats).
+				// @DOCLINE * `@NLFT file_format` - the [file format](#audio-file-formats) (`@NLFT` typedef for `uint8_m`).
 				muafFileFormat file_format;
 				// @DOCLINE * `@NLFT specific` - the [format-specific profile](#format-specific-profile).
 				muafSpecificProfile specific;
@@ -891,7 +907,9 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 			// @DOCLINE ### Audio formats
 
-				// @DOCLINE The type `muafAudioFormat` represents an audio format supported in muaf, and has the following defined values:
+				// @DOCLINE The type `muafAudioFormat` (typedef for `uint32_m`) represents an audio format supported in muaf. Each audio format has a corresponding type that represents how each sample/packet is stored. If an audio format's corresponding type is an integer/decimal type, then the audio format is uncompressed, and vice versa.
+
+				// @DOCLINE The type `muafAudioFormat` has the following defined values:
 
 				// @DOCLINE * `MUAF_FORMAT_UNKNOWN` - unknown or unsupported audio format.
 				#define MUAF_FORMAT_UNKNOWN 0
@@ -931,14 +949,64 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 					#endif
 
+				// @DOCLINE #### Audio format nice names
+
+					#ifdef MUAF_NAMES
+
+					// @DOCLINE The name function `muaf_audio_format_get_nice_name` returns a presentable `const char*` representation of a given audio format (for example, `MUAF_FORMAT_PCM_U8` returns "8-bit unsigned PCM"), defined below: @NLNT
+					MUDEF const char* muaf_audio_format_get_nice_name(muafAudioFormat format);
+
+					// @DOCLINE This function returns "Unknown" in the case that `format` is an unrecognized value.
+					// @DOCLINE > This function is a "name" function, and therefore is only defined if `MUAF_NAMES` is also defined.
+
+					#endif
+
+				// @DOCLINE #### Get audio format compression
+
+					// @DOCLINE The function `muaf_audio_format_compressed` returns if a given audio format is compressed, defined below: @NLNT
+					MUDEF muBool muaf_audio_format_compressed(muafAudioFormat format);
+
+					// @DOCLINE This function returns `MU_FALSE` if the given format is unrecognized.
+
+				// @DOCLINE #### Get audio format sample size
+
+					// @DOCLINE The function `muaf_audio_format_sample_size` returns the size of a single sample for an uncompressed audio format, defined below: @NLNT
+					MUDEF size_m muaf_audio_format_sample_size(muafAudioFormat format);
+
+					// @DOCLINE If the given format is compressed or unrecognized, this function returns 0.
+
 			// @DOCLINE ### Audio file formats
 
-				// @DOCLINE The type `muafFileFormat` represents a file format supported in muaf, and has the following defined values:
+				// @DOCLINE The type `muafFileFormat` (typedef for `uint8_m`) represents a file format supported in muaf, and has the following defined values:
 
 				// @DOCLINE * `MUAF_UNKNOWN` - an unknown and/or unrecognized file format.
 				#define MUAF_UNKNOWN 0
 				// @DOCLINE * `MUAF_WAVE` - the [WAVE file format](#wave-api).
 				#define MUAF_WAVE 1
+
+				// @DOCLINE #### Audio file format names
+
+					#ifdef MUAF_NAMES
+
+					// @DOCLINE The name function `muaf_audio_file_format_get_name` returns a `const char*` representation of a given audio file format (for example, `MUAF_WAVE` returns "MUAF_WAVE"), defined below: @NLNT
+					MUDEF const char* muaf_audio_file_format_get_name(muafFileFormat format);
+
+					// @DOCLINE This function returns "MUAF_UNKNOWN" in the case that `format` is an unrecognized value.
+					// @DOCLINE > This function is a "name" function, and therefore is only defined if `MUAF_NAMES` is also defined.
+
+					#endif
+
+				// @DOCLINE #### Audio file format nice names
+
+					#ifdef MUAF_NAMES
+
+					// @DOCLINE The name function `muaf_audio_file_format_get_nice_name` returns a presentable `const char*` representation of a given audio file format (for example, `MUAF_WAVE` returns "WAVE (.wav, .wave)"), defined below: @NLNT
+					MUDEF const char* muaf_audio_file_format_get_nice_name(muafFileFormat format);
+
+					// @DOCLINE This function returns "Unknown" in the case that `format` is an unrecognized value.
+					// @DOCLINE > This function is a "name" function, and therefore is only defined if `MUAF_NAMES` is also defined.
+
+					#endif
 
 			// @DOCLINE ### Format specific profile
 
@@ -953,12 +1021,83 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 			// @DOCLINE This function does not use the filename extension to identify the audio file format, but instead, the actual contents of the file itself. This function returns `MUAF_UNKNOWN` if rather the audio file format could not be identified to be anything supported in muaf, or muaf failed to retrieve the file's data.
 
-		// @DOCLINE ## Read raw audio frames
+		// @DOCLINE ## Reading audio data
 
-			// @DOCLINE The function `mu_read_audio_file_frames` reads raw audio file frames from an audio file, defined below: @NLNT
-			MUDEF muafResult mu_read_audio_file_frames(const char* filename, muafInspecificProfile* profile, size_m beg_frame, size_m frame_len, void* data);
+			// @DOCLINE This section covers the functionality for reading audio data.
 
-			// @DOCLINE The profile given must be a valid loaded profile from a file that has gone unchanged since the profile was initially loaded. The frame range provided must be valid; this function does not check if the given frame range is valid. The given data must match the corresponding type of the profile's audio format (which itself must be a supported and defined value for `muafAudioFormat`), and `data` must be large enough to hold the requested amount of frames.
+			// @DOCLINE ### Read uncompressed raw data
+
+				// @DOCLINE The function `mu_read_uncompressed_audio_file` reads an uncompressed audio file's raw data, defined below: @NLNT
+				MUDEF muafResult mu_read_uncompressed_audio_file(const char* filename, muafInspecificProfile* profile, muafFrames beg_frame, muafFrames frame_len, void* data);
+
+				// @DOCLINE The profile given must be a valid loaded profile from a file that has gone unchanged since the profile was initially loaded. The given audio file's audio format must be uncompressed. The frame range provided must be valid; this function does not check if the given frame range is valid. The given data must match the corresponding type of the profile's audio format (which itself must be a supported and defined value for `muafAudioFormat`), and `data` must be large enough to hold the requested amount of frames.
+
+		// @DOCLINE ## Writing audio data
+
+			// @DOCLINE This section covers the functionality for writing audio data.
+
+			// @DOCLINE ### Audio wrapper
+
+				typedef struct muWAVEWrapper muWAVEWrapper;
+				// This union is described later. Make sure it stays updated!
+				union muafSpecificWrapper {
+					muWAVEWrapper* WAVE;
+				};
+				typedef union muafSpecificWrapper muafSpecificWrapper;
+
+				typedef struct muafInspecificWrapper muafInspecificWrapper;
+
+				// @DOCLINE muaf is designed to be able to write an audio file across multiple function calls. In particular, it is designed this way so that not all of the audio data needs to be readily available at one moment in memory in order for all of the audio to be successfully encoded into the audio file.
+
+				// @DOCLINE The primary way that muaf achieves this is by encapsulating writing audio data into a ***wrapper***, which describes an audio file that may be in the process of being written to. An audio file being written using a wrapper is only successfully fully encoded when the wrapper has been created and, afterwards, all of the audio frames have been written once and once only. Audio frames do not need to be written in any particular order.
+
+				// @DOCLINE The function `mu_create_audio_file_wrapper` creates an audio file with no audio encoded in it based on the given wrapper information, defined below: @NLNT
+				MUDEF muafResult mu_create_audio_file_wrapper(const char* filename, muafInspecificWrapper* wrapper);
+
+				// @DOCLINE Once an inspecific wrapper has been successfully or non-fatally retrieved, the wrapper is filled with data, some of which may be manually allocated automatically. To free this data, use the function `mu_free_audio_file_wrapper`, defined below: @NLNT
+				MUDEF void mu_free_audio_file_wrapper(muafInspecificWrapper* wrapper);
+
+				// @DOCLINE All of the parameters within `wrapper` meant to be set by the user should be set before calling this function. Once this function has successfully or non-fatally executed, the file will be created, but it is not guaranteed to be properly encoded until all audio frames have been written once and once only.
+
+				// @DOCLINE The struct `muafInspecificWrapper` represents an inspecific audio file wrapper, and has the following members:
+				struct muafInspecificWrapper {
+					// @DOCLINE * `@NLFT num_frames` - the number of frames (`@NLFT` typedef for `uint64_m`).
+					muafFrames num_frames;
+					// @DOCLINE * `@NLFT sample_rate` - the amount of samples that should be played every second per channel (`@NLFT` typedef for `uint32_m`).
+					muafSampleRate sample_rate;
+					// @DOCLINE * `@NLFT num_channels` - the number of channels (`@NLFT` typedef for `uint16_m`).
+					muafChannels num_channels;
+					// @DOCLINE * `@NLFT audio_format` - the [audio format](#audio-formats) (`@NLFT` typedef for `uint32_m`).
+					muafAudioFormat audio_format;
+					// @DOCLINE * `@NLFT file_format` - the [file format](#audio-file-formats) (`@NLFT` typedef for `uint8_m`).
+					muafFileFormat file_format;
+					// @DOCLINE * `@NLFT specific` - the [format-specific wrapper](#format-specific-wrapper). This is filled in automatically after a call to `mu_create_audio_file_wrapper`.
+					muafSpecificWrapper specific;
+				};
+
+			// @DOCLINE ### Format specific wrapper
+
+				// @DOCLINE The union `muafSpecificWrapper` represents the wrapper of a particular audio file format, and has the following members:
+
+				// @DOCLINE * `muWAVEWrapper* WAVE` - the [WAVE wrapper](#wave-wrapper).
+
+			// @DOCLINE ### Write raw audio frames
+
+				// @DOCLINE The function `mu_write_uncompressed_audio_file` writes frames to an uncompressed audio file, defined below: @NLNT
+				MUDEF muafResult mu_write_uncompressed_audio_file(const char* filename, muafInspecificWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, void* data);
+
+				// @DOCLINE The given wrapper must have its contents unaltered by the user since its original call to [`mu_create_audio_file_wrapper`](#audio-wrapper), and its audio format must be uncompressed. Once all audio frames have been written to the audio file once and once only, the file should be properly encoded.
+
+				// @DOCLINE The given data `data` may be altered during a call to this function, and may not be the same once the function has finished.
+
+			// @DOCLINE ### Get wrapper from audio file
+
+				// @DOCLINE The function `mu_get_audio_file_wrapper` fills in information for an audio file wrapper based on the contents of another audio file, defined below: @NLNT
+				MUDEF muafResult mu_get_audio_file_wrapper(muafInspecificProfile* profile, muafInspecificWrapper* wrapper);
+
+				// @DOCLINE The parameter `profile` should be [retrieved beforehand](#audio-profile) from an existing file, and the given audio file should have [a supported inspecific audio format equivalent](#wave-format-to-inspecific-audio-format).
+
+				// @DOCLINE The members of `wrapper` will be filled in based on the given audio file described by `profile`, except for any members that are set by the function [`mu_create_audio_file_wrapper`](#audio-wrapper).
 
 	// @DOCLINE # WAVE API
 
@@ -1076,12 +1215,12 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 			// @DOCLINE This section covers the functionality for reading WAVE audio data.
 
-			// @DOCLINE ### Read raw WAVE audio frames
+			// @DOCLINE ### Read uncompressed raw WAVE data
 
-				// @DOCLINE The function `mu_WAVE_read_audio_file_frames` reads raw audio file frames from a WAVE audio file, defined below: @NLNT
-				MUDEF muafResult mu_WAVE_read_audio_file_frames(const char* filename, muWAVEProfile* profile, size_m beg_frame, size_m frame_len, void* data);
+				// @DOCLINE The function `mu_read_WAVE_uncompressed` reads an uncompressed WAVE file's raw data, defined below: @NLNT
+				MUDEF muafResult mu_read_WAVE_uncompressed(const char* filename, muWAVEProfile* profile, muafFrames beg_frame, muafFrames frame_len, void* data);
 
-				// @DOCLINE The [WAVE format of the profile](#wave-formats) must have a supported [inspecific audio format](#audio-formats) equivalent; AKA, a [conversion from the profile's WAVE format to its inspecific audio format equivalent](#wave-format-to-inspecific-audio-format) must not return `MUAF_FORMAT_UNKNOWN`. Listed limitations from [the inspecific function to read raw audio frames](#read-raw-audio-frames) apply.
+				// @DOCLINE Listed limitations from [the inspecific function to read raw audio frames](#read-uncompressed-raw-data) apply.
 
 			// @DOCLINE ### WAVE format to inspecific audio format
 
@@ -1094,20 +1233,23 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 			// @DOCLINE This section covers the functionality for writing WAVE audio data.
 
-			// @DOCLINE ### Create WAVE wrapper
+			// @DOCLINE ### WAVE wrapper
 
-				typedef struct muWAVEWrapper muWAVEWrapper;
+				// @DOCLINE The function `mu_create_WAVE_wrapper` creates a WAVE file given WAVE wrapper information, defined below: @NLNT
+				MUDEF muafResult mu_create_WAVE_wrapper(const char* filename, muWAVEWrapper* wrapper);
 
-				// @DOCLINE The function `mu_WAVE_create_wrapper` creates a WAVE file given WAVE wrapper information, defined below: @NLNT
-				MUDEF muafResult mu_WAVE_create_wrapper(const char* filename, muWAVEWrapper* wrapper);
+				// @DOCLINE The function `mu_free_WAVE_wrapper` frees any manually allocated data that might have been generated from its call to `mu_create_WAVE_wrapper`, defined below: @NLNT
+				MUDEF void mu_free_WAVE_wrapper(muWAVEWrapper* wrapper);
+
+				// @DOCLINE Listed limitations from [the inspecific functions to create/free a wrapper](#audio-wrapper) apply.
 
 				// @DOCLINE The struct `muWAVEWrapper` represents a WAVE file wrapper, and has the following members:
 				struct muWAVEWrapper {
 					// @DOCLINE * `@NLFT audio_format` - the [audio format](#audio-formats) of the WAVE file.
 					muafAudioFormat audio_format;
-					// @DOCLINE * `@NLFT frame_count` - the amount of frames in the WAVE file.
-					uint32_m frame_count;
-					// @DOCLINE * `@NLFT num_channels` - the number of samples per frame.
+					// @DOCLINE * `@NLFT num_frames` - the amount of frames in the WAVE file.
+					uint32_m num_frames;
+					// @DOCLINE * `@NLFT num_channels` - the number of channels.
 					uint16_m num_channels;
 					// @DOCLINE * `@NLFT sample_rate` - the amount of samples that should be played every second per channel.
 					uint32_m sample_rate;
@@ -1117,19 +1259,17 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 			// @DOCLINE ### Write raw WAVE audio frames
 
-				// @DOCLINE The function `mu_WAVE_write_audio_file_frames` writes raw audio file frames to a WAVE audio file, defined below: @NLNT
-				MUDEF muafResult mu_WAVE_write_audio_file_frames(const char* filename, muWAVEWrapper* wrapper, size_m beg_frame, size_m frame_len, void* data);
+				// @DOCLINE The function `mu_write_WAVE_uncompressed` writes frames to an uncompressed WAVE file, defined below: @NLNT
+				MUDEF muafResult mu_write_WAVE_uncompressed(const char* filename, muWAVEWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, void* data);
 
-				// @DOCLINE The given wrapper and file must have their contents unaltered from their original call to [`mu_WAVE_create_wrapper`](#create-wave-wrapper), and the given audio data `data` must match the format of the WAVE file.
+				// @DOCLINE Listed limitations from [the inspecific function to write raw audio frames](#write-raw-audio-frames) apply.
 
 			// @DOCLINE ### Get WAVE wrapper from audio file
 
-				// @DOCLINE The function `mu_WAVE_get_wrapper` fills in information for a WAVE wrapper based on the contents of another WAVE file, defined below: @NLNT
-				MUDEF muafResult mu_WAVE_get_wrapper(muWAVEProfile* profile, muWAVEWrapper* wrapper);
+				// @DOCLINE The function `mu_get_WAVE_wrapper` fills in information for a WAVE wrapper based on the contents of another WAVE file, defined below: @NLNT
+				MUDEF muafResult mu_get_WAVE_wrapper(muWAVEProfile* profile, muWAVEWrapper* wrapper);
 
-				// @DOCLINE `profile` should be [retrieved beforehand](#wave-profile) from an existing file, and the given audio file should have [a supported inspecific audio format equivalent](#wave-format-to-inspecific-audio-format).
-
-				// @DOCLINE The members of `wrapper` will be filled in based on the given audio file, except for the members used internally.
+				// @DOCLINE Listed limitations from [the inspecific function to get a wrapper from an audio file](#get-wrapper-from-audio-file) apply.
 
 		// @DOCLINE ## WAVE known bugs and limitations
 
@@ -1164,6 +1304,10 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				#define MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT 3
 				// @DOCLINE * `MUAF_FAILED_CREATE_FILE` - an attempt to create the file failed.
 				#define MUAF_FAILED_CREATE_FILE 4
+				// @DOCLINE * `MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT` - the task could not be completed due to the file being in an audio file format (or the user providing an audio file format value) that muaf does not support or could not recognize.
+				#define MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT 5
+				// @DOCLINE * `MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION` - an attempt to retrieve/write information from/to an audio file failed, as the assumed file format was not the case (such as trying to get the profile of a WAVE file using `mu_get_WAVE_profile` when the file in question doesn't appear to actually be a WAVE file).
+				#define MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION 6
 
 			// @DOCLINE ### WAVE result values
 			// 1024 -> 2047 //
@@ -1182,10 +1326,8 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				#define MUAF_INVALID_WAVE_FMT_SAMPLES_PER_SEC 1029
 				// @DOCLINE * `MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE` - the WAVE chunk fmt-ck's PCM-format-specific value 'wBitsPerSample' has an invalid value; it's rather equal to 0, non-divisible by 8 without a remainder, doesn't evenly divide the length of the wave data, or doesn't align with the value for wBlockAlign.
 				#define MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE 1030
-				// @DOCLINE * `MUAF_FAILED_WAVE_IDENTIFICATION` - an attempt to retrieve WAVE information from a file that doesn't appear to be a WAVE file has occurred.
-				#define MUAF_FAILED_WAVE_IDENTIFICATION 1031
 				// @DOCLINE * `MUAF_INVALID_WAVE_FILE_WRITE_SIZE` - the WAVE file could not be created, as the size of the WAVE file would be over the maximum file size of a WAVE file due to any of the limitations of how big certain values can be encoded in WAVE (such as the ckSize for the RIFF chunk).
-				#define MUAF_INVALID_WAVE_FILE_WRITE_SIZE 1032
+				#define MUAF_INVALID_WAVE_FILE_WRITE_SIZE 1031
 
 		// @DOCLINE ## Check if result is fatal
 
@@ -1618,6 +1760,33 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				}
 			}
 
+			// Gets WAVE profile given inner file
+			muafResult muafWAVE_GetWAVEProfile(muafInner_File* file, muWAVEProfile* profile) {
+				// Make sure it's WAVE
+				if (!muafWAVE_IsWAVE(file)) {
+					return MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION;
+				}
+				// Correct file length based on ckSize
+				muafWAVE_HandleCkSize(file);
+
+				// Zero-out profile memory
+				mu_memset(profile, 0, sizeof(muWAVEProfile));
+
+				// Get chunk information
+				muafResult res = muafWAVE_GetChunks(file, profile);
+				if (muaf_result_is_fatal(res)) {
+					return res;
+				}
+				// Get fmt information
+				res = muafWAVE_GetFmtInfo(file, profile);
+				if (muaf_result_is_fatal(res)) {
+					mu_free_WAVE_profile(profile);
+					return res;
+				}
+
+				return res;
+			}
+
 			// Gets WAVE profile
 			MUDEF muafResult mu_get_WAVE_profile(const char* filename, muWAVEProfile* profile) {
 				// Open file
@@ -1625,28 +1794,9 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				if (muafInner_LoadFile(filename, &file) != 0) {
 					return MUAF_FAILED_OPEN_FILE;
 				}
-				// Make sure it's WAVE
-				if (!muafWAVE_IsWAVE(&file)) {
-					return MUAF_FAILED_WAVE_IDENTIFICATION;
-				}
-				// Correct file length based on ckSize
-				muafWAVE_HandleCkSize(&file);
-
-				// Zero-out profile memory
-				mu_memset(profile, 0, sizeof(muWAVEProfile));
-
-				// Get chunk information
-				muafResult res = muafWAVE_GetChunks(&file, profile);
-				if (muaf_result_is_fatal(res)) {
-					return res;
-				}
-
-				// Get fmt information
-				res = muafWAVE_GetFmtInfo(&file, profile);
-				if (muaf_result_is_fatal(res)) {
-					mu_free_WAVE_profile(profile);
-					return res;
-				}
+				
+				// Get WAVE profile
+				muafResult res = muafWAVE_GetWAVEProfile(&file, profile);
 
 				// Close file
 				muafInner_DeloadFile(&file);
@@ -1667,42 +1817,42 @@ Overall, muaf is okay with files not strictly complying with the specification w
 			/* PCM reading */
 
 				// MUAF_FORMAT_PCM_U8
-				void muafWAVE_read_FORMAT_PCM_U8(muafInner_File* file, muWAVEProfile* profile, size_m beg_frame, size_m frame_len, uint8_m* data) {
+				void muafWAVE_read_FORMAT_PCM_U8(muafInner_File* file, muWAVEProfile* profile, muafFrames beg_frame, muafFrames frame_len, uint8_m* data) {
 					// Read data from file
 					muafInner_LoadFromFile(file, profile->chunks.wave + (beg_frame * profile->channels), frame_len * profile->channels, data);
 				}
 
 				// MUAF_FORMAT_PCM_S16
-				void muafWAVE_read_FORMAT_PCM_S16(muafInner_File* file, muWAVEProfile* profile, size_m beg_frame, size_m frame_len, int16_m* data) {
+				void muafWAVE_read_FORMAT_PCM_S16(muafInner_File* file, muWAVEProfile* profile, muafFrames beg_frame, muafFrames frame_len, int16_m* data) {
 					// Read data from file
 					muafInner_LoadFromFile(file, profile->chunks.wave + (beg_frame * 2 * profile->channels), frame_len * 2 * profile->channels, (muByte*)data);
 					// Correct byte orders
-					size_m sample_count = frame_len * profile->channels;
-					for (size_m s = 0; s < sample_count; ++s) {
+					muafFrames sample_count = frame_len * profile->channels;
+					for (muafFrames s = 0; s < sample_count; ++s) {
 						int16_m sample = MU_RLES16(((muByte*)data)+(s*2));
 						data[s] = sample;
 					}
 				}
 
 				// MUAF_FORMAT_PCM_S32
-				void muafWAVE_read_FORMAT_PCM_S32(muafInner_File* file, muWAVEProfile* profile, size_m beg_frame, size_m frame_len, int32_m* data) {
+				void muafWAVE_read_FORMAT_PCM_S32(muafInner_File* file, muWAVEProfile* profile, muafFrames beg_frame, muafFrames frame_len, int32_m* data) {
 					// Read data from file
 					muafInner_LoadFromFile(file, profile->chunks.wave + (beg_frame * 4 * profile->channels), frame_len * 4 * profile->channels, (muByte*)data);
 					// Correct byte orders
-					size_m sample_count = frame_len * profile->channels;
-					for (size_m s = 0; s < sample_count; ++s) {
+					muafFrames sample_count = frame_len * profile->channels;
+					for (muafFrames s = 0; s < sample_count; ++s) {
 						int16_m sample = MU_RLES16(((muByte*)data)+(s*4));
 						data[s] = sample;
 					}
 				}
 
 				// MUAF_FORMAT_PCM_S64
-				void muafWAVE_read_FORMAT_PCM_S64(muafInner_File* file, muWAVEProfile* profile, size_m beg_frame, size_m frame_len, int64_m* data) {
+				void muafWAVE_read_FORMAT_PCM_S64(muafInner_File* file, muWAVEProfile* profile, muafFrames beg_frame, muafFrames frame_len, int64_m* data) {
 					// Read data from file
 					muafInner_LoadFromFile(file, profile->chunks.wave + (beg_frame * 8 * profile->channels), frame_len * 8 * profile->channels, (muByte*)data);
 					// Correct byte orders
-					size_m sample_count = frame_len * profile->channels;
-					for (size_m s = 0; s < sample_count; ++s) {
+					muafFrames sample_count = frame_len * profile->channels;
+					for (muafFrames s = 0; s < sample_count; ++s) {
 						int16_m sample = MU_RLES16(((muByte*)data)+(s*8));
 						data[s] = sample;
 					}
@@ -1728,8 +1878,24 @@ Overall, muaf is okay with files not strictly complying with the specification w
 					}
 				}
 
-				// Reads raw audio frames
-				MUDEF muafResult mu_WAVE_read_audio_file_frames(const char* filename, muWAVEProfile* profile, size_m beg_frame, size_m frame_len, void* data) {
+				// Reads uncompressed raw data given inner file and format
+				muafResult muafWAVE_ReadUncompressed(muafInner_File* file, muWAVEProfile* profile, muafAudioFormat format, muafFrames beg_frame, muafFrames frame_len, void* data) {
+					// Perform reading based on format
+					switch (format) {
+						// Unknown
+						default: return MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT; break;
+						// WAVE PCM
+						case MUAF_FORMAT_PCM_U8:  muafWAVE_read_FORMAT_PCM_U8 (file, profile, beg_frame, frame_len, (uint8_m*)data); break;
+						case MUAF_FORMAT_PCM_S16: muafWAVE_read_FORMAT_PCM_S16(file, profile, beg_frame, frame_len, (int16_m*)data); break;
+						case MUAF_FORMAT_PCM_S32: muafWAVE_read_FORMAT_PCM_S32(file, profile, beg_frame, frame_len, (int32_m*)data); break;
+						case MUAF_FORMAT_PCM_S64: muafWAVE_read_FORMAT_PCM_S64(file, profile, beg_frame, frame_len, (int64_m*)data); break;
+					}
+
+					return MUAF_SUCCESS;
+				}
+
+				// Reads uncompressed raw data
+				MUDEF muafResult mu_read_WAVE_uncompressed(const char* filename, muWAVEProfile* profile, muafFrames beg_frame, muafFrames frame_len, void* data) {
 					// Open file
 					muafInner_File file;
 					if (muafInner_LoadFile(filename, &file) != 0) {
@@ -1738,25 +1904,12 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 					// Get muaf supported audio format
 					muafAudioFormat format = mu_WAVE_inspecific_audio_format(profile->format_tag, profile->specific_fields);
-
-					// Perform reading based on format
-					switch (format) {
-						// Unknown
-						default: {
-							muafInner_DeloadFile(&file);
-							return MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT;
-						} break;
-
-						// WAVE PCM
-						case MUAF_FORMAT_PCM_U8:  muafWAVE_read_FORMAT_PCM_U8 (&file, profile, beg_frame, frame_len, (uint8_m*)data); break;
-						case MUAF_FORMAT_PCM_S16: muafWAVE_read_FORMAT_PCM_S16(&file, profile, beg_frame, frame_len, (int16_m*)data); break;
-						case MUAF_FORMAT_PCM_S32: muafWAVE_read_FORMAT_PCM_S32(&file, profile, beg_frame, frame_len, (int32_m*)data); break;
-						case MUAF_FORMAT_PCM_S64: muafWAVE_read_FORMAT_PCM_S64(&file, profile, beg_frame, frame_len, (int64_m*)data); break;
-					}
+					// Perform reading
+					muafResult res = muafWAVE_ReadUncompressed(&file, profile, format, beg_frame, frame_len, data);
 
 					// Close file
 					muafInner_DeloadFile(&file);
-					return MUAF_SUCCESS;
+					return res;
 				}
 
 		/* Writing */
@@ -1941,7 +2094,7 @@ Overall, muaf is okay with files not strictly complying with the specification w
 						wrapper->chunks.wave += 1;
 					}
 					// WAVE chunk length
-					wrapper->chunks.wave_len = wrapper->frame_count * sample_size * wrapper->num_channels;
+					wrapper->chunks.wave_len = wrapper->num_frames * sample_size * wrapper->num_channels;
 
 					// Write length
 					*len = ((size_m)wrapper->chunks.wave) + ((size_m)wrapper->chunks.wave_len);
@@ -2004,7 +2157,7 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				}
 
 				// Creates WAVE file wrapper
-				MUDEF muafResult mu_WAVE_create_wrapper(const char* filename, muWAVEWrapper* wrapper) {
+				MUDEF muafResult mu_create_WAVE_wrapper(const char* filename, muWAVEWrapper* wrapper) {
 					// Initialize chunk info
 					size_m len;
 					muafResult res = muafWAVE_FillChunks(wrapper, &len);
@@ -2040,21 +2193,33 @@ Overall, muaf is okay with files not strictly complying with the specification w
 					return res;
 				}
 
+				// Destroys WAVE file wrapper
+				MUDEF void mu_free_WAVE_wrapper(muWAVEWrapper* wrapper) {
+					// Does nothing currently (sorry lol :P)
+					return; if (wrapper) {}
+				}
+
+				// Converts inspecific wrapper to WAVE wrapper
+				void muafWAVE_InspecificWrapperToWAVE(muafInspecificWrapper* inspecific, muWAVEWrapper* wave) {
+					wave->audio_format = inspecific->audio_format;
+					wave->num_frames = inspecific->num_frames;
+					wave->num_channels = inspecific->num_channels;
+					wave->sample_rate = inspecific->sample_rate;
+				}
+
 			/* PCM writing */
 
-				// @TODO Mention that data passed in may be altered!
-
 				// MUAF_FORMAT_PCM_U8
-				void muafWAVE_write_FORMAT_PCM_U8(muafInner_File* file, muWAVEWrapper* wrapper, size_m beg_frame, size_m frame_len, uint8_m* data) {
+				void muafWAVE_write_FORMAT_PCM_U8(muafInner_File* file, muWAVEWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, uint8_m* data) {
 					// Write data over
 					muafInner_WriteToFile(file, wrapper->chunks.wave + (beg_frame * wrapper->num_channels), frame_len * wrapper->num_channels, data);
 				}
 
 				// MUAF_FORMAT_PCM_S16
-				void muafWAVE_write_FORMAT_PCM_S16(muafInner_File* file, muWAVEWrapper* wrapper, size_m beg_frame, size_m frame_len, int16_m* data) {
+				void muafWAVE_write_FORMAT_PCM_S16(muafInner_File* file, muWAVEWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, int16_m* data) {
 					// Convert each sample
-					size_m sample_count = frame_len * wrapper->num_channels;
-					for (size_m s = 0; s < sample_count; ++s) {
+					muafFrames sample_count = frame_len * wrapper->num_channels;
+					for (muafFrames s = 0; s < sample_count; ++s) {
 						muByte sample_data[2];
 						MU_WLES16(sample_data, data[s]);
 						mu_memcpy(&data[s], sample_data, 2);
@@ -2065,10 +2230,10 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				}
 
 				// MUAF_FORMAT_PCM_S32
-				void muafWAVE_write_FORMAT_PCM_S32(muafInner_File* file, muWAVEWrapper* wrapper, size_m beg_frame, size_m frame_len, int32_m* data) {
+				void muafWAVE_write_FORMAT_PCM_S32(muafInner_File* file, muWAVEWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, int32_m* data) {
 					// Convert each sample
-					size_m sample_count = frame_len * wrapper->num_channels;
-					for (size_m s = 0; s < sample_count; ++s) {
+					muafFrames sample_count = frame_len * wrapper->num_channels;
+					for (muafFrames s = 0; s < sample_count; ++s) {
 						muByte sample_data[4];
 						MU_WLES32(sample_data, data[s]);
 						mu_memcpy(&data[s], sample_data, 4);
@@ -2079,10 +2244,10 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				}
 
 				// MUAF_FORMAT_PCM_S64
-				void muafWAVE_write_FORMAT_PCM_S64(muafInner_File* file, muWAVEWrapper* wrapper, size_m beg_frame, size_m frame_len, int64_m* data) {
+				void muafWAVE_write_FORMAT_PCM_S64(muafInner_File* file, muWAVEWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, int64_m* data) {
 					// Convert each sample
-					size_m sample_count = frame_len * wrapper->num_channels;
-					for (size_m s = 0; s < sample_count; ++s) {
+					muafFrames sample_count = frame_len * wrapper->num_channels;
+					for (muafFrames s = 0; s < sample_count; ++s) {
 						muByte sample_data[8];
 						MU_WLES64(sample_data, data[s]);
 						mu_memcpy(&data[s], sample_data, 8);
@@ -2094,42 +2259,101 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 			/* Audio writing */
 
-				// Writes raw audio frames
-				MUDEF muafResult mu_WAVE_write_audio_file_frames(const char* filename, muWAVEWrapper* wrapper, size_m beg_frame, size_m frame_len, void* data) {
+				// Writes uncompressed raw WAVE data given inner file
+				muafResult muafWAVE_WriteUncompressed(muafInner_File* file, muWAVEWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, void* data) {
+					// Perform writing based on format
+					switch (wrapper->audio_format) {
+						// Unknown
+						default: return MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT; break;
+						// WAVE PCM
+						case MUAF_FORMAT_PCM_U8:  muafWAVE_write_FORMAT_PCM_U8 (file, wrapper, beg_frame, frame_len, (uint8_m*)data); break;
+						case MUAF_FORMAT_PCM_S16: muafWAVE_write_FORMAT_PCM_S16(file, wrapper, beg_frame, frame_len, (int16_m*)data); break;
+						case MUAF_FORMAT_PCM_S32: muafWAVE_write_FORMAT_PCM_S32(file, wrapper, beg_frame, frame_len, (int32_m*)data); break;
+						case MUAF_FORMAT_PCM_S64: muafWAVE_write_FORMAT_PCM_S64(file, wrapper, beg_frame, frame_len, (int64_m*)data); break;
+					}
+
+					return MUAF_SUCCESS;
+				}
+
+				// Writes uncompressed raw WAVE data
+				MUDEF muafResult mu_write_WAVE_uncompressed(const char* filename, muWAVEWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, void* data) {
 					// Open file
 					muafInner_File file;
 					if (muafInner_CreateFile(filename, &file, 0) != 0) {
 						return MUAF_FAILED_CREATE_FILE;
 					}
 
-					// Perform writing based on format
-					switch (wrapper->audio_format) {
-						default: break;
-
-						// WAVE PCM
-						case MUAF_FORMAT_PCM_U8:  muafWAVE_write_FORMAT_PCM_U8 (&file, wrapper, beg_frame, frame_len, (uint8_m*)data); break;
-						case MUAF_FORMAT_PCM_S16: muafWAVE_write_FORMAT_PCM_S16(&file, wrapper, beg_frame, frame_len, (int16_m*)data); break;
-						case MUAF_FORMAT_PCM_S32: muafWAVE_write_FORMAT_PCM_S32(&file, wrapper, beg_frame, frame_len, (int32_m*)data); break;
-						case MUAF_FORMAT_PCM_S64: muafWAVE_write_FORMAT_PCM_S64(&file, wrapper, beg_frame, frame_len, (int64_m*)data); break;
-					}
+					// Perform writing
+					muafResult res = muafWAVE_WriteUncompressed(&file, wrapper, beg_frame, frame_len, data);
 
 					// Close file
 					muafInner_DeloadFile(&file);
-					return MUAF_SUCCESS;
+					return res;
 				}
 
 				// Retrieves WAVE wrapper equivalent from existing file
-				MUDEF muafResult mu_WAVE_get_wrapper(muWAVEProfile* profile, muWAVEWrapper* wrapper) {
+				MUDEF muafResult mu_get_WAVE_wrapper(muWAVEProfile* profile, muWAVEWrapper* wrapper) {
 					// Get audio format
 					wrapper->audio_format = mu_WAVE_inspecific_audio_format(profile->format_tag, profile->specific_fields);
 					// Calculate frame count
-					wrapper->frame_count = profile->chunks.wave_len / profile->block_align;
+					wrapper->num_frames = profile->chunks.wave_len / profile->block_align;
 					// Number of channels
 					wrapper->num_channels = profile->channels;
 					// Sample rate
 					wrapper->sample_rate = profile->samples_per_sec;
 					return MUAF_SUCCESS;
 				}
+
+				// Retrieves inspecific wrapper from WAVE file
+				void muafWAVE_GetInspecificWrapper(muWAVEProfile* profile, muafInspecificWrapper* wrapper) {
+					wrapper->num_frames = profile->chunks.wave_len / profile->block_align;
+					wrapper->sample_rate = profile->samples_per_sec;
+					wrapper->num_channels = profile->channels;
+					wrapper->audio_format = mu_WAVE_inspecific_audio_format(profile->format_tag, profile->specific_fields);
+					wrapper->file_format = MUAF_WAVE;
+				}
+
+		/* WAVE format-inspecific */
+
+			// WAVE equivalent of mu_free_audio_file_profile
+			void muafWAVE_FreeAudioFileProfile(muafInspecificProfile* profile) {
+				// If WAVE profile exists:
+				if (profile->specific.WAVE) {
+					// Destroy it
+					mu_free_WAVE_profile(profile->specific.WAVE);
+					// And then free it
+					mu_free(profile->specific.WAVE);
+				}
+			}
+
+			// WAVE equivalent of mu_get_audio_file_profile
+			muafResult muafWAVE_GetAudioFileProfile(muafInner_File* file, muafInspecificProfile* profile) {
+				// Allocate WAVE profile
+				profile->specific.WAVE = (muWAVEProfile*)mu_malloc(sizeof(muWAVEProfile));
+				if (!profile->specific.WAVE) {
+					return MUAF_FAILED_MALLOC;
+				}
+
+				// Get WAVE profile
+				muafResult res = muafWAVE_GetWAVEProfile(file, profile->specific.WAVE);
+				if (muaf_result_is_fatal(res)) {
+					muafWAVE_FreeAudioFileProfile(profile);
+					return res;
+				}
+
+				// Get frame count
+				profile->num_frames = profile->specific.WAVE->chunks.wave_len / profile->specific.WAVE->block_align;
+				// Get sample rate
+				profile->sample_rate = profile->specific.WAVE->samples_per_sec;
+				// Get channel count
+				profile->num_channels = profile->specific.WAVE->channels;
+				// Get audio format
+				profile->audio_format = mu_WAVE_inspecific_audio_format(profile->specific.WAVE->format_tag, profile->specific.WAVE->specific_fields);
+				// Set file format
+				profile->file_format = MUAF_WAVE;
+
+				return res;
+			}
 
 	/* Format-inspecific API */
 
@@ -2152,6 +2376,147 @@ Overall, muaf is okay with files not strictly complying with the specification w
 			return format;
 		}
 
+		// Get inspecific profile
+		MUDEF muafResult mu_get_audio_file_profile(const char* filename, muafInspecificProfile* profile) {
+			// Open file
+			muafInner_File file;
+			if (muafInner_LoadFile(filename, &file) != 0) {
+				return MUAF_FAILED_OPEN_FILE;
+			}
+
+			// Perform based on file format
+			muafResult res;
+			// - WAVE
+			if (muafWAVE_IsWAVE(&file)) {
+				res = muafWAVE_GetAudioFileProfile(&file, profile);
+			}
+			// - Unrecognized
+			else {
+				res = MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT;
+			}
+
+			// Close file
+			muafInner_DeloadFile(&file);
+			return res;
+		}
+
+		// Frees inspecific profile
+		MUDEF void mu_free_audio_file_profile(muafInspecificProfile* profile) {
+			// Perform based on format
+			switch (profile->file_format) {
+				case MUAF_WAVE: muafWAVE_FreeAudioFileProfile(profile); break;
+			}
+		}
+
+		// Returns whether or not given audio format is compressed
+		MUDEF muBool muaf_audio_format_compressed(muafAudioFormat format) {
+			switch (format) {
+				default: return MU_FALSE; break;
+			}
+		}
+
+		// Returns uncompressed audio format sample size
+		MUDEF size_m muaf_audio_format_sample_size(muafAudioFormat format) {
+			// Perform based on format
+			switch (format) {
+				// Unknown
+				default: return 0; break;
+
+				// PCM
+				case MUAF_FORMAT_PCM_U8 : return 1; break;
+				case MUAF_FORMAT_PCM_S16: return 2; break;
+				case MUAF_FORMAT_PCM_S32: return 4; break;
+				case MUAF_FORMAT_PCM_S64: return 8; break;
+			}
+		}
+
+		// Reads uncompressed raw data
+		MUDEF muafResult mu_read_uncompressed_audio_file(const char* filename, muafInspecificProfile* profile, muafFrames beg_frame, muafFrames frame_len, void* data) {
+			// Open file
+			muafInner_File file;
+			if (muafInner_LoadFile(filename, &file) != 0) {
+				return MUAF_FAILED_OPEN_FILE;
+			}
+
+			// Perform based on file format
+			muafResult res;
+			switch (profile->file_format) {
+				default: res = MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT; break;
+				case MUAF_WAVE: res = muafWAVE_ReadUncompressed(&file, profile->specific.WAVE, profile->audio_format, beg_frame, frame_len, data); break;
+			}
+
+			// Close file
+			muafInner_DeloadFile(&file);
+			return res;
+		}
+
+		// Creates an audio file wrapper
+		MUDEF muafResult mu_create_audio_file_wrapper(const char* filename, muafInspecificWrapper* wrapper) {
+			// Perform based on file format
+			switch (wrapper->file_format) {
+				// Unknown
+				default: return MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT; break;
+
+				// WAVE
+				case MUAF_WAVE: {
+					// Allocate WAVE wrapper
+					wrapper->specific.WAVE = (muWAVEWrapper*)mu_malloc(sizeof(muWAVEWrapper));
+					if (!wrapper->specific.WAVE) {
+						return MUAF_FAILED_MALLOC;
+					}
+					// Set WAVE wrapper equivalent
+					muafWAVE_InspecificWrapperToWAVE(wrapper, wrapper->specific.WAVE);
+
+					// Create wrapper
+					muafResult res = mu_create_WAVE_wrapper(filename, wrapper->specific.WAVE);
+					if (muaf_result_is_fatal(res)) {
+						mu_free_audio_file_wrapper(wrapper);
+					}
+					return res;
+				} break;
+			}
+		}
+
+		// Frees an audio file wrapper
+		MUDEF void mu_free_audio_file_wrapper(muafInspecificWrapper* wrapper) {
+			// Perform based on file format
+			switch (wrapper->file_format) {
+				// Unknown
+				default: break;
+
+				// WAVE
+				case MUAF_WAVE: {
+					// If it exists:
+					if (wrapper->specific.WAVE) {
+						// Destroy it
+						mu_free_WAVE_wrapper(wrapper->specific.WAVE);
+						// And free it
+						mu_free(wrapper->specific.WAVE);
+					}
+				} break;
+			}
+		}
+
+		// Writes uncompressed raw data
+		MUDEF muafResult mu_write_uncompressed_audio_file(const char* filename, muafInspecificWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, void* data) {
+			// Perform based on file format
+			switch (wrapper->file_format) {
+				default: return MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT; break;
+				case MUAF_WAVE: return mu_write_WAVE_uncompressed(filename, wrapper->specific.WAVE, beg_frame, frame_len, data); break;
+			}
+		}
+
+		// Gets wrapper from audio file
+		MUDEF muafResult mu_get_audio_file_wrapper(muafInspecificProfile* profile, muafInspecificWrapper* wrapper) {
+			// Perform based on file format
+			switch (profile->file_format) {
+				default: return MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT; break;
+				case MUAF_WAVE: muafWAVE_GetInspecificWrapper(profile->specific.WAVE, wrapper); break;
+			}
+
+			return MUAF_SUCCESS;
+		}
+
 	/* Names */
 
 		#ifdef MUAF_NAMES
@@ -2163,6 +2528,30 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				case MUAF_FORMAT_PCM_S16: return "MUAF_FORMAT_PCM_S16"; break;
 				case MUAF_FORMAT_PCM_S32: return "MUAF_FORMAT_PCM_S32"; break;
 				case MUAF_FORMAT_PCM_S64: return "MUAF_FORMAT_PCM_S64"; break;
+			}
+		}
+
+		MUDEF const char* muaf_audio_format_get_nice_name(muafAudioFormat format) {
+			switch (format) {
+				default: return "Unknown"; break;
+				case MUAF_FORMAT_PCM_U8: return "8-bit unsigned PCM"; break;
+				case MUAF_FORMAT_PCM_S16: return "16-bit signed PCM"; break;
+				case MUAF_FORMAT_PCM_S32: return "32-bit signed PCM"; break;
+				case MUAF_FORMAT_PCM_S64: return "64-bit signed PCM"; break;
+			}
+		}
+
+		MUDEF const char* muaf_audio_file_format_get_name(muafFileFormat format) {
+			switch (format) {
+				default: return "MUAF_UNKNOWN"; break;
+				case MUAF_WAVE: return "MUAF_WAVE"; break;
+			}
+		}
+
+		MUDEF const char* muaf_audio_file_format_get_nice_name(muafFileFormat format) {
+			switch (format) {
+				default: return "Unknown"; break;
+				case MUAF_WAVE: return "WAVE (.wav, .wave)"; break;
 			}
 		}
 
@@ -2181,6 +2570,8 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				case MUAF_FAILED_OPEN_FILE: return "MUAF_FAILED_OPEN_FILE"; break;
 				case MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT: return "MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT"; break;
 				case MUAF_FAILED_CREATE_FILE: return "MUAF_FAILED_CREATE_FILE"; break;
+				case MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT: return "MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT"; break;
+				case MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION: return "MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION"; break;
 				case MUAF_INVALID_WAVE_CHUNK_LENGTH_FOR_FILE: return "MUAF_INVALID_WAVE_CHUNK_LENGTH_FOR_FILE"; break;
 				case MUAF_INVALID_WAVE_MISSING_FMT: return "MUAF_INVALID_WAVE_MISSING_FMT"; break;
 				case MUAF_INVALID_WAVE_MISSING_WAVE_DATA: return "MUAF_INVALID_WAVE_MISSING_WAVE_DATA"; break;
@@ -2188,7 +2579,6 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				case MUAF_INVALID_WAVE_FMT_CHANNELS: return "MUAF_INVALID_WAVE_FMT_CHANNELS"; break;
 				case MUAF_INVALID_WAVE_FMT_SAMPLES_PER_SEC: return "MUAF_INVALID_WAVE_FMT_SAMPLES_PER_SEC"; break;
 				case MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE: return "MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE"; break;
-				case MUAF_FAILED_WAVE_IDENTIFICATION: return "MUAF_FAILED_WAVE_IDENTIFICATION"; break;
 				case MUAF_INVALID_WAVE_FILE_WRITE_SIZE: return "MUAF_INVALID_WAVE_FILE_WRITE_SIZE"; break;
 			}
 		}
