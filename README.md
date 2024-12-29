@@ -73,9 +73,9 @@ An audio file's '***raw data***' refers to the raw audio data based on the audio
 
 An audio file's '***decompressed data***' refers to uncompressed audio data, whether or not it was generated from compressed or uncompressed audio data. If the given audio data's format is uncompressed, then the decompressed data simply refers to the raw data. However, if the given audio data's format is compressed, then the decompressed data refers to the raw data's equivalent uncompressed audio data. In other words, the decompressed data refers to the decompressed version of the raw data (whether or not it was compressed in the first place).
 
-# Format-inspecific reading API
+# Format-unspecific reading API
 
-muaf's reading API is split into two sections: the format-specific API, and the format-inspecific API. The inspecific API wraps around the specific API, encapsulating the specific API's functionality, and allowing you to retrieve general information about an audio file without having to directly consider what specific audio file format it is.
+muaf's reading API is split into two sections: the format-specific API, and the format-unspecific API. The unspecific API wraps around the specific API, encapsulating the specific API's functionality, and allowing you to retrieve general information about an audio file without having to directly consider what specific audio file format it is.
 
 ## Audio profile
 
@@ -89,23 +89,23 @@ For each audio format, general information about the audio stored in the file ca
 
 In the format-specific API, the profile stores general information that very directly corresponds to the general information stored in the audio file itself. For example, [the WAVE profile](#wave-profile) stores information about what supported chunks are provided in the file and where they are. It also stores the information within certain chunks that provide general information about the audio, such as the fmt chunk, which provides information such as the number of channels.
 
-In the format-inspecific API, the profile primarily stores general information that all of the supported audio file formats within muaf have in common. This allows the user to retrieve information about the audio file without having to know how to retrieve it from the exact audio file format that it's in. The inspecific profile also loads and stores the specific profile information.
+In the format-unspecific API, the profile primarily stores general information that all of the supported audio file formats within muaf have in common. This allows the user to retrieve information about the audio file without having to know how to retrieve it from the exact audio file format that it's in. The unspecific profile also loads and stores the specific profile information.
 
-An audio file's inspecific profile can be retrieved using the function `mu_get_audio_file_profile`, defined below: 
+An audio file's unspecific profile can be retrieved using the function `mu_get_audio_file_profile`, defined below: 
 
 ```c
-MUDEF muafResult mu_get_audio_file_profile(const char* filename, muafInspecificProfile* profile);
+MUDEF muafResult mu_get_audio_file_profile(const char* filename, muafUnspecificProfile* profile);
 ```
 
 
-Once an inspecific profile has been successfully or non-fatally retrieved (indicated by [the result return value](#result)), the profile is filled with data, some of which may be manually allocated automatically. To free this data, use the function `mu_free_audio_file_profile`, defined below: 
+Once an unspecific profile has been successfully or non-fatally retrieved (indicated by [the result return value](#result)), the profile is filled with data, some of which may be manually allocated automatically. To free this data, use the function `mu_free_audio_file_profile`, defined below: 
 
 ```c
-MUDEF void mu_free_audio_file_profile(muafInspecificProfile* profile);
+MUDEF void mu_free_audio_file_profile(muafUnspecificProfile* profile);
 ```
 
 
-The inspecific profile is represented by the struct `muafInspecificProfile`, which has the following members:
+The unspecific profile is represented by the struct `muafUnspecificProfile`, which has the following members:
 
 * `muafFrames num_frames` - the number of frames (`muafFrames` typedef for `uint64_m`).
 
@@ -245,7 +245,7 @@ This section covers the functionality for reading audio data.
 The function `mu_read_uncompressed_audio_file` reads an uncompressed audio file's raw data, defined below: 
 
 ```c
-MUDEF muafResult mu_read_uncompressed_audio_file(const char* filename, muafInspecificProfile* profile, muafFrames beg_frame, muafFrames frame_len, void* data);
+MUDEF muafResult mu_read_uncompressed_audio_file(const char* filename, muafUnspecificProfile* profile, muafFrames beg_frame, muafFrames frame_len, void* data);
 ```
 
 
@@ -264,20 +264,20 @@ The primary way that muaf achieves this is by encapsulating writing audio data i
 The function `mu_create_audio_file_wrapper` creates an audio file with no audio encoded in it based on the given wrapper information, defined below: 
 
 ```c
-MUDEF muafResult mu_create_audio_file_wrapper(const char* filename, muafInspecificWrapper* wrapper);
+MUDEF muafResult mu_create_audio_file_wrapper(const char* filename, muafUnspecificWrapper* wrapper);
 ```
 
 
-Once an inspecific wrapper has been successfully or non-fatally retrieved, the wrapper is filled with data, some of which may be manually allocated automatically. To free this data, use the function `mu_free_audio_file_wrapper`, defined below: 
+Once an unspecific wrapper has been successfully or non-fatally retrieved, the wrapper is filled with data, some of which may be manually allocated automatically. To free this data, use the function `mu_free_audio_file_wrapper`, defined below: 
 
 ```c
-MUDEF void mu_free_audio_file_wrapper(muafInspecificWrapper* wrapper);
+MUDEF void mu_free_audio_file_wrapper(muafUnspecificWrapper* wrapper);
 ```
 
 
 All of the parameters within `wrapper` meant to be set by the user should be set before calling this function. Once this function has successfully or non-fatally executed, the file will be created, but it is not guaranteed to be properly encoded until all audio frames have been written once and once only.
 
-The struct `muafInspecificWrapper` represents an inspecific audio file wrapper, and has the following members:
+The struct `muafUnspecificWrapper` represents an unspecific audio file wrapper, and has the following members:
 
 * `muafFrames num_frames` - the number of frames (`muafFrames` typedef for `uint64_m`).
 
@@ -302,7 +302,7 @@ The union `muafSpecificWrapper` represents the wrapper of a particular audio fil
 The function `mu_write_uncompressed_audio_file` writes frames to an uncompressed audio file, defined below: 
 
 ```c
-MUDEF muafResult mu_write_uncompressed_audio_file(const char* filename, muafInspecificWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, void* data);
+MUDEF muafResult mu_write_uncompressed_audio_file(const char* filename, muafUnspecificWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, void* data);
 ```
 
 
@@ -315,11 +315,11 @@ The given data `data` may be altered during a call to this function, and may not
 The function `mu_get_audio_file_wrapper` fills in information for an audio file wrapper based on the contents of another audio file, defined below: 
 
 ```c
-MUDEF muafResult mu_get_audio_file_wrapper(muafInspecificProfile* profile, muafInspecificWrapper* wrapper);
+MUDEF muafResult mu_get_audio_file_wrapper(muafUnspecificProfile* profile, muafUnspecificWrapper* wrapper);
 ```
 
 
-The parameter `profile` should be [retrieved beforehand](#audio-profile) from an existing file, and the given audio file should have [a supported inspecific audio format equivalent](#wave-format-to-inspecific-audio-format).
+The parameter `profile` should be [retrieved beforehand](#audio-profile) from an existing file, and the given audio file should have [a supported unspecific audio format equivalent](#wave-format-to-unspecific-audio-format).
 
 The members of `wrapper` will be filled in based on the given audio file described by `profile`, except for any members that are set by the function [`mu_create_audio_file_wrapper`](#audio-wrapper).
 
@@ -439,14 +439,14 @@ MUDEF muafResult mu_read_WAVE_uncompressed(const char* filename, muWAVEProfile* 
 ```
 
 
-Listed limitations from [the inspecific function to read raw audio frames](#read-uncompressed-raw-data) apply.
+Listed limitations from [the unspecific function to read raw audio frames](#read-uncompressed-raw-data) apply.
 
-### WAVE format to inspecific audio format
+### WAVE format to unspecific audio format
 
-The function `mu_WAVE_inspecific_audio_format` converts a WAVE audio format to its supported [inspecific audio format](#audio-formats) equivalent, which muaf can then generally work with, defined below: 
+The function `mu_WAVE_unspecific_audio_format` converts a WAVE audio format to its supported [unspecific audio format](#audio-formats) equivalent, which muaf can then generally work with, defined below: 
 
 ```c
-MUDEF muafAudioFormat mu_WAVE_inspecific_audio_format(uint16_m format_tag, muWAVEFormatSpecificFields specific_fields);
+MUDEF muafAudioFormat mu_WAVE_unspecific_audio_format(uint16_m format_tag, muWAVEFormatSpecificFields specific_fields);
 ```
 
 
@@ -472,7 +472,7 @@ MUDEF void mu_free_WAVE_wrapper(muWAVEWrapper* wrapper);
 ```
 
 
-Listed limitations from [the inspecific functions to create/free a wrapper](#audio-wrapper) apply.
+Listed limitations from [the unspecific functions to create/free a wrapper](#audio-wrapper) apply.
 
 The struct `muWAVEWrapper` represents a WAVE file wrapper, and has the following members:
 
@@ -495,7 +495,7 @@ MUDEF muafResult mu_write_WAVE_uncompressed(const char* filename, muWAVEWrapper*
 ```
 
 
-Listed limitations from [the inspecific function to write raw audio frames](#write-raw-audio-frames) apply.
+Listed limitations from [the unspecific function to write raw audio frames](#write-raw-audio-frames) apply.
 
 ### Get WAVE wrapper from audio file
 
@@ -506,7 +506,7 @@ MUDEF muafResult mu_get_WAVE_wrapper(muWAVEProfile* profile, muWAVEWrapper* wrap
 ```
 
 
-Listed limitations from [the inspecific function to get a wrapper from an audio file](#get-wrapper-from-audio-file) apply.
+Listed limitations from [the unspecific function to get a wrapper from an audio file](#get-wrapper-from-audio-file) apply.
 
 ## WAVE known bugs and limitations
 

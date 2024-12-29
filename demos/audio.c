@@ -50,7 +50,7 @@ More explicit license information at the end of file.
 	muafResult res;
 
 	// Audio profile
-	muafInspecificProfile profile;
+	muafUnspecificProfile profile;
 
 	// Data read from the audio file
 	muByte* data;
@@ -91,7 +91,7 @@ int main(void)
 
 	// Get wrapper based on this file
 	printf("Getting wrapper...\n");
-	muafInspecificWrapper wrapper;
+	muafUnspecificWrapper wrapper;
 	res = mu_get_audio_file_wrapper(&profile, &wrapper);
 	if (res != MUAF_SUCCESS) {
 		printf("Non-successful result - %s", muaf_result_get_name(res));

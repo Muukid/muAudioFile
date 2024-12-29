@@ -113,8 +113,8 @@ int main(void)
 
 	printf("\n== Write info ==\n");
 
-	// Get inspecific audio format
-	muafAudioFormat audio_format = mu_WAVE_inspecific_audio_format(profile.format_tag, profile.specific_fields);
+	// Get unspecific audio format
+	muafAudioFormat audio_format = mu_WAVE_unspecific_audio_format(profile.format_tag, profile.specific_fields);
 	printf("muaf format - %s\n", muaf_audio_format_get_name(audio_format));
 	// Return if unsupported
 	if (audio_format == MUAF_FORMAT_UNKNOWN) {
