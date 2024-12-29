@@ -8,6 +8,8 @@ Licensed under MIT License or public domain, whichever you prefer.
 More explicit license information at the end of file.
 
 @TODO Overview section, not just terminology
+@TODO Add wave data size check (if haven't already)
+@TODO More concise handling for audio files with no audio data (?)
 
 @DOCBEGIN
 
@@ -851,6 +853,8 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 		// @DOCLINE An audio file's '***decompressed data***' refers to uncompressed audio data, whether or not it was generated from compressed or uncompressed audio data. If the given audio data's format is uncompressed, then the decompressed data simply refers to the raw data. However, if the given audio data's format is compressed, then the decompressed data refers to the raw data's equivalent uncompressed audio data. In other words, the decompressed data refers to the decompressed version of the raw data (whether or not it was compressed in the first place).
 
+		// @DOCLINE The terminology listed above for muaf does not apply when muaf is referencing the specification of another audio file format. In those instances, the specification's terminology applies.
+
 	// @DOCLINE # Format-unspecific reading API
 
 		// @DOCLINE muaf's reading API is split into two sections: the format-specific API, and the format-unspecific API. The unspecific API wraps around the specific API, encapsulating the specific API's functionality, and allowing you to retrieve general information about an audio file without having to directly consider what specific audio file format it is.
@@ -983,6 +987,8 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				#define MUAF_UNKNOWN 0
 				// @DOCLINE * `MUAF_WAVE` - the [WAVE file format](#wave-api).
 				#define MUAF_WAVE 1
+				// @DOCLINE * `MUAF_FLAC` - the [FLAC file format](#flac-api).
+				#define MUAF_FLAC 2
 
 				// @DOCLINE #### Audio file format names
 
@@ -1101,7 +1107,7 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 	// @DOCLINE # WAVE API
 
-		// @DOCLINE This section describes muaf's API for the [Waveform Audio File Format](https://en.wikipedia.org/wiki/WAV), or WAVE. The code for this API is built based off of the original August 1991 specification for WAVE (specifically [this archive](https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/WAVE/Docs/riffmci.pdf)), and this section of muaf's documentation will reference values that are defined in this specification.
+		// @DOCLINE This section describes muaf's API for the [Waveform Audio File Format](https://en.wikipedia.org/wiki/WAV), or WAVE. The code for this API is built based off of the original August 1991 specification for WAVE (specifically [this archive](https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/WAVE/Docs/riffmci.pdf)), and this section of muaf's documentation will reference concepts that are defined in this specification.
 
 		// @DOCLINE ## WAVE profile
 
@@ -1283,6 +1289,48 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 				// @DOCLINE muaf does not currently support values for wBitsPerSample that are not divisible by 8.
 
+	// @DOCLINE # FLAC API
+
+		// @DOCLINE This section describes muaf's API for the [Free Lossless Audio Codec](https://en.wikipedia.org/wiki/FLAC), or FLAC. The code for this API is built based off of [the RFC 9639 specification](https://datatracker.ietf.org/doc/rfc9639/), and this section of muaf's documentation will reference concepts that are defined in this specification. Any quotes referenced in this section are from RFC 9639 unless it is stated otherwise.
+
+		// @DOCLINE All values provided by the FLAC API by retrieving information from a FLAC audio file are checked and strictly guaranteed to be values permitted by the specification unless it is stated otherwise. These limitations are also strictly followed when encoding with no exceptions.
+
+		// @DOCLINE ## FLAC profile
+
+			typedef struct muFLACProfile muFLACProfile;
+
+			// @DOCLINE A FLAC file's profile can be retrieved with the function `mu_get_FLAC_profile`, defined below: @NLNT
+			MUDEF muafResult mu_get_FLAC_profile(const char* filename, muFLACProfile* profile);
+
+			// @DOCLINE Once retrieved, the profile must be deallocated at some point using the function `mu_free_FLAC_profile`, defined below: @NLNT
+			MUDEF void mu_free_FLAC_profile(muFLACProfile* profile);
+
+			// @DOCLINE The struct `muFLACProfile` represents the audio file profile of a FLAC file, and has the following members:
+			struct muFLACProfile {
+				// @DOCLINE * `@NLFT contains_audio` - whether or not the given FLAC file has any audio data stored in it.
+				muBool contains_audio;
+				// @DOCLINE * `@NLFT min_block_size` - the first value in the streaminfo metadata block; "The minimum block size (in samples) used in the stream, excluding the last block."
+				uint16_m min_block_size;
+				// @DOCLINE * `@NLFT max_block_size` - the second value in the streaminfo metadata block; "The maximum block size (in samples) used in the stream."
+				uint16_m max_block_size;
+				// @DOCLINE * `@NLFT min_frame_size` - the third value in the streaminfo metadata block; "The minimum frame size (in bytes) used in the stream."
+				uint32_m min_frame_size;
+				// @DOCLINE * `@NLFT max_frame_size` - the fourth value in the streaminfo metadata block; "The maximum frame size (in bytes) used in the stream."
+				uint32_m max_frame_size;
+				// @DOCLINE * `@NLFT sample_rate` - the fifth value in the streaminfo metadata block; "Sample rate in Hz."
+				uint32_m sample_rate;
+				// @DOCLINE * `@NLFT num_channels` - the sixth value in the streaminfo metadata block; "(number of channels)-1."
+				uint8_m num_channels;
+				// @DOCLINE * `@NLFT bits_per_sample` - the seventh value in the streaminfo metadata block; "	(bits per sample)-1."
+				uint8_m bits_per_sample;
+				// @DOCLINE * `@NLFT num_samples` - the eight value in the streaminfo metadata block; "Total number of interchannel samples in the stream."
+				uint64_m num_samples;
+				// @DOCLINE * `@NLFT low_checksum` - the low bytes of the ninth value in the streaminfo metadata block; low bytes of "MD5 checksum of the unencoded audio data."
+				uint64_m low_checksum;
+				// @DOCLINE * `@NLFT high_checksum` - the high bytes of the ninth value in the streaminfo metadata block; high bytes of "MD5 checksum of the unencoded audio data."
+				uint64_m high_checksum;
+			};
+
 	// @DOCLINE # Result
 
 		// @DOCLINE The type `muafResult` (typedef for `uint32_m`) is defined to represent how a task went. Result values can be "fatal" (meaning that the task completely failed to execute, and the program will continue as if the task had never been attempted), "non-fatal" (meaning that the task partially failed, but was still able to complete the task), and "successful" (meaning that the task fully succeeded as intended).
@@ -1328,6 +1376,27 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				#define MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE 1030
 				// @DOCLINE * `MUAF_INVALID_WAVE_FILE_WRITE_SIZE` - the WAVE file could not be created, as the size of the WAVE file would be over the maximum file size of a WAVE file due to any of the limitations of how big certain values can be encoded in WAVE (such as the ckSize for the RIFF chunk).
 				#define MUAF_INVALID_WAVE_FILE_WRITE_SIZE 1031
+
+			// @DOCLINE ### FLAC result values
+			// 2048 -> 3071 //
+
+				// @DOCLINE * `MUAF_INVALID_FLAC_STREAMINFO_LENGTH` - the streaminfo metadata block has an invalid recorded length (not 34 bytes).
+				#define MUAF_INVALID_FLAC_STREAMINFO_LENGTH 2048
+				// @DOCLINE * `MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_RANGE` - the listed minimum or maximum block size within streaminfo was not within the required value range of 16 to 65535.
+				#define MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_RANGE 2049
+				// @DOCLINE * `MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_MIN_MAX` - the listed minimum and maximum block size within streaminfo do not make sense, as the maximum is smaller than the minimum.
+				#define MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_MIN_MAX 2050
+
+				// #define MUAF_INVALID_FLAC_STREAMINFO_FRAME_SIZE_RANGE 2051
+
+				// @DOCLINE * `MUAF_INVALID_FLAC_STREAMINFO_FRAME_SIZE_MIN_MAX` - the listed minimum and maximum frame size within streaminfo do not make sense, as the maximum is smaller than the minimum.
+				#define MUAF_INVALID_FLAC_STREAMINFO_FRAME_SIZE_MIN_MAX 2052
+				// @DOCLINE * `MUAF_INVALID_FLAC_STREAMINFO_NUM_CHANNELS` - the listed number of channels within streaminfo (after accounting for subtraction) is not within the permitted range of 1 to 8. This value is permitted to be zero (after accounting for subtraction) if no audio is being stored.
+				#define MUAF_INVALID_FLAC_STREAMINFO_NUM_CHANNELS 2053
+				// @DOCLINE * `MUAF_INVALID_FLAC_STREAMINFO_BITS_PER_SAMPLE` - the listed bits per sample within streaminfo (after accounting for subtraction) is not within the permitted range of 4 to 32. This value is permitted to be zero (after accounting for subtraction) if no audio is being stored.
+				#define MUAF_INVALID_FLAC_STREAMINFO_BITS_PER_SAMPLE 2054
+				// @DOCLINE * `MUAF_INVALID_FLAC_STREAMINFO_SAMPLE_COUNT` - the listed amount of samples doesn't make sense, rather because the FLAC file doesn't contain audio and the sample count is over 0, or because the FLAC file does contain audio and the sample count is 0.
+				#define MUAF_INVALID_FLAC_STREAMINFO_SAMPLE_COUNT 2055
 
 		// @DOCLINE ## Check if result is fatal
 
@@ -2355,6 +2424,156 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				return res;
 			}
 
+	/* FLAC */
+
+		// @TODO Confirm frame values
+
+		/* Profiling */
+
+			// Checks if given data even is FLAC or not
+			muBool muafFLAC_IsFLAC(muafInner_File* file) {
+				// Minimum length check
+				// Includes fLaC (4) and entire streaminfo metadata block (4 byte header + 34 descriptive bytes)
+				if (file->len < 42) {
+					return MU_FALSE;
+				}
+
+				// Load first 5 bytes
+				muByte data[5];
+				muafInner_LoadFromFile(file, 0, 5, data);
+
+				// Check for fLaC
+				if (MU_RBEU32(data) != 0x664C6143) {
+					return MU_FALSE;
+				}
+
+				// Check for first metadata block being streaminfo
+				if ((data[4] & 0x7F) != 0) {
+					return MU_FALSE;
+				}
+
+				// Has fLaC and streaminfo metadata block, so likely FLAC.
+				return MU_TRUE;
+			}
+
+			// Reads information from the streaminfo metadata block
+			// Streaminfo's existence and its min. length should already be confirmed (muafFLAC_IsFLAC)
+			muafResult muafFLAC_ProcessStreaminfo(muafInner_File* file, muFLACProfile* profile, muBool* more) {
+				// Read streaminfo block (including header)
+				muByte data[38];
+				muafInner_LoadFromFile(file, 4, 38, data);
+
+				// Read if there's more metadata blocks after this
+				*more = (data[0] & 0x80) == 0;
+
+				// Read and confirm streaminfo's listed length
+				if (MU_RBEU24(data+1) != 34) {
+					return MUAF_INVALID_FLAC_STREAMINFO_LENGTH;
+				}
+
+				// Read and confirm min. block size
+				profile->min_block_size = MU_RBEU16(data+4);
+				if (profile->min_block_size < 16) {
+					return MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_RANGE;
+				}
+				// Read and confirm max. block size
+				profile->max_block_size = MU_RBEU16(data+6);
+				if (profile->max_block_size < 16) {
+					return MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_RANGE;
+				}
+				if (profile->max_block_size < profile->min_block_size) {
+					return MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_MIN_MAX;
+				}
+
+				// Read min. frame size
+				profile->min_frame_size = MU_RBEU24(data+8);
+				// Read and confirm max. frame size
+				profile->max_frame_size = MU_RBEU24(data+11);
+				if (profile->min_frame_size != 0 && profile->max_frame_size != 0) {
+					if (profile->max_frame_size < profile->min_frame_size) {
+						return MUAF_INVALID_FLAC_STREAMINFO_FRAME_SIZE_MIN_MAX;
+					}
+				}
+
+				// Read sample rate (b=14, l=20)
+				profile->sample_rate = (MU_RBEU24(data+14) & 0xFFFFF0) >> 4;
+				// Interpret sample rate
+				profile->contains_audio = profile->sample_rate != 0;
+
+				// Read and confirm number of channels (b=16, o=4, l=3)
+				profile->num_channels = (*(data+16) & 0xE) >> 0x1;
+				if (profile->num_channels++ == 0) {
+					return MUAF_INVALID_FLAC_STREAMINFO_NUM_CHANNELS;
+				}
+				if (profile->contains_audio && profile->num_channels == 0) {
+					return MUAF_INVALID_FLAC_STREAMINFO_NUM_CHANNELS;
+				}
+
+				// Read and confirm bits per sample (b=16, o=7, l=5)
+				profile->bits_per_sample = (MU_RBEU16(data+16) & 0x1F0) >> 4;
+				if (profile->bits_per_sample++ == 0) {
+					return MUAF_INVALID_FLAC_STREAMINFO_BITS_PER_SAMPLE;
+				}
+				if (profile->contains_audio && profile->bits_per_sample == 0) {
+					return MUAF_INVALID_FLAC_STREAMINFO_BITS_PER_SAMPLE;
+				}
+
+				// Read and confirm interchannel sample count (b=17, o=4, l=36)
+				profile->num_samples = (MU_RBEU64(data+17) & 0xFFFFFFFFF000000) >> 24;
+				if (
+					( profile->contains_audio && profile->num_samples == 0) || 
+					(!profile->contains_audio && profile->num_samples != 0)) {
+					return MUAF_INVALID_FLAC_STREAMINFO_SAMPLE_COUNT;
+				}
+
+				// Read low and high bytes of checksum (b=22, l=128)
+				profile->high_checksum = MU_RBEU64(data+22);
+				profile->low_checksum = MU_RBEU64(data+30);
+				return MUAF_SUCCESS;
+			}
+
+			// Gets FLAC profile given inner file
+			muafResult muafFLAC_GetFLACProfile(muafInner_File* file, muFLACProfile* profile) {
+				// Make sure it's FLAC
+				if (!muafFLAC_IsFLAC(file)) {
+					return MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION;
+				}
+				// Zero-out profile memory
+				mu_memset(profile, 0, sizeof(muFLACProfile));
+
+				// Get streaminfo
+				muBool more;
+				muafResult res = muafFLAC_ProcessStreaminfo(file, profile, &more);
+				if (muaf_result_is_fatal(res)) {
+					mu_free_FLAC_profile(profile);
+					return res;
+				}
+
+				return res;
+			}
+
+			// Gets FLAC profile
+			MUDEF muafResult mu_get_FLAC_profile(const char* filename, muFLACProfile* profile) {
+				// Open file
+				muafInner_File file;
+				if (muafInner_LoadFile(filename, &file) != 0) {
+					return MUAF_FAILED_OPEN_FILE;
+				}
+
+				// Get FLAC profile
+				muafResult res = muafFLAC_GetFLACProfile(&file, profile);
+
+				// Close file
+				muafInner_DeloadFile(&file);
+				return res;
+			}
+
+			// Frees FLAC profile
+			MUDEF void mu_free_FLAC_profile(muFLACProfile* profile) {
+				// Does nothing currently, sorry!
+				return; if (profile) {}
+			}
+
 	/* Format-unspecific API */
 
 		// Get audio file format
@@ -2369,6 +2588,9 @@ Overall, muaf is okay with files not strictly complying with the specification w
 			muafFileFormat format = MUAF_UNKNOWN;
 			if (muafWAVE_IsWAVE(&file)) {
 				format = MUAF_WAVE;
+			}
+			else if (muafFLAC_IsFLAC(&file)) {
+				format = MUAF_FLAC;
 			}
 
 			// Close file
@@ -2545,6 +2767,7 @@ Overall, muaf is okay with files not strictly complying with the specification w
 			switch (format) {
 				default: return "MUAF_UNKNOWN"; break;
 				case MUAF_WAVE: return "MUAF_WAVE"; break;
+				case MUAF_FLAC: return "MUAF_FLAC"; break;
 			}
 		}
 
@@ -2552,6 +2775,7 @@ Overall, muaf is okay with files not strictly complying with the specification w
 			switch (format) {
 				default: return "Unknown"; break;
 				case MUAF_WAVE: return "WAVE (.wav, .wave)"; break;
+				case MUAF_FLAC: return "FLAC (.flac)"; break;
 			}
 		}
 
@@ -2580,6 +2804,13 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				case MUAF_INVALID_WAVE_FMT_SAMPLES_PER_SEC: return "MUAF_INVALID_WAVE_FMT_SAMPLES_PER_SEC"; break;
 				case MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE: return "MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE"; break;
 				case MUAF_INVALID_WAVE_FILE_WRITE_SIZE: return "MUAF_INVALID_WAVE_FILE_WRITE_SIZE"; break;
+				case MUAF_INVALID_FLAC_STREAMINFO_LENGTH: return "MUAF_INVALID_FLAC_STREAMINFO_LENGTH"; break;
+				case MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_RANGE: return "MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_RANGE"; break;
+				case MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_MIN_MAX: return "MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_MIN_MAX"; break;
+				case MUAF_INVALID_FLAC_STREAMINFO_FRAME_SIZE_MIN_MAX: return "MUAF_INVALID_FLAC_STREAMINFO_FRAME_SIZE_MIN_MAX"; break;
+				case MUAF_INVALID_FLAC_STREAMINFO_NUM_CHANNELS: return "MUAF_INVALID_FLAC_STREAMINFO_NUM_CHANNELS"; break;
+				case MUAF_INVALID_FLAC_STREAMINFO_BITS_PER_SAMPLE: return "MUAF_INVALID_FLAC_STREAMINFO_BITS_PER_SAMPLE"; break;
+				case MUAF_INVALID_FLAC_STREAMINFO_SAMPLE_COUNT: return "MUAF_INVALID_FLAC_STREAMINFO_SAMPLE_COUNT"; break;
 			}
 		}
 

@@ -73,6 +73,8 @@ An audio file's '***raw data***' refers to the raw audio data based on the audio
 
 An audio file's '***decompressed data***' refers to uncompressed audio data, whether or not it was generated from compressed or uncompressed audio data. If the given audio data's format is uncompressed, then the decompressed data simply refers to the raw data. However, if the given audio data's format is compressed, then the decompressed data refers to the raw data's equivalent uncompressed audio data. In other words, the decompressed data refers to the decompressed version of the raw data (whether or not it was compressed in the first place).
 
+The terminology listed above for muaf does not apply when muaf is referencing the specification of another audio file format. In those instances, the specification's terminology applies.
+
 # Format-unspecific reading API
 
 muaf's reading API is split into two sections: the format-specific API, and the format-unspecific API. The unspecific API wraps around the specific API, encapsulating the specific API's functionality, and allowing you to retrieve general information about an audio file without having to directly consider what specific audio file format it is.
@@ -192,6 +194,8 @@ The type `muafFileFormat` (typedef for `uint8_m`) represents a file format suppo
 * `MUAF_UNKNOWN` - an unknown and/or unrecognized file format.
 
 * `MUAF_WAVE` - the [WAVE file format](#wave-api).
+
+* `MUAF_FLAC` - the [FLAC file format](#flac-api).
 
 #### Audio file format names
 
@@ -325,7 +329,7 @@ The members of `wrapper` will be filled in based on the given audio file describ
 
 # WAVE API
 
-This section describes muaf's API for the [Waveform Audio File Format](https://en.wikipedia.org/wiki/WAV), or WAVE. The code for this API is built based off of the original August 1991 specification for WAVE (specifically [this archive](https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/WAVE/Docs/riffmci.pdf)), and this section of muaf's documentation will reference values that are defined in this specification.
+This section describes muaf's API for the [Waveform Audio File Format](https://en.wikipedia.org/wiki/WAV), or WAVE. The code for this API is built based off of the original August 1991 specification for WAVE (specifically [this archive](https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/WAVE/Docs/riffmci.pdf)), and this section of muaf's documentation will reference concepts that are defined in this specification.
 
 ## WAVE profile
 
@@ -520,6 +524,52 @@ muaf does not currently support wave-data that's provided in the form of a LIST.
 
 muaf does not currently support values for wBitsPerSample that are not divisible by 8.
 
+# FLAC API
+
+This section describes muaf's API for the [Free Lossless Audio Codec](https://en.wikipedia.org/wiki/FLAC), or FLAC. The code for this API is built based off of [the RFC 9639 specification](https://datatracker.ietf.org/doc/rfc9639/), and this section of muaf's documentation will reference concepts that are defined in this specification. Any quotes referenced in this section are from RFC 9639 unless it is stated otherwise.
+
+All values provided by the FLAC API by retrieving information from a FLAC audio file are checked and strictly guaranteed to be values permitted by the specification unless it is stated otherwise. These limitations are also strictly followed when encoding with no exceptions.
+
+## FLAC profile
+
+A FLAC file's profile can be retrieved with the function `mu_get_FLAC_profile`, defined below: 
+
+```c
+MUDEF muafResult mu_get_FLAC_profile(const char* filename, muFLACProfile* profile);
+```
+
+
+Once retrieved, the profile must be deallocated at some point using the function `mu_free_FLAC_profile`, defined below: 
+
+```c
+MUDEF void mu_free_FLAC_profile(muFLACProfile* profile);
+```
+
+
+The struct `muFLACProfile` represents the audio file profile of a FLAC file, and has the following members:
+
+* `muBool contains_audio` - whether or not the given FLAC file has any audio data stored in it.
+
+* `uint16_m min_block_size` - the first value in the streaminfo metadata block; "The minimum block size (in samples) used in the stream, excluding the last block."
+
+* `uint16_m max_block_size` - the second value in the streaminfo metadata block; "The maximum block size (in samples) used in the stream."
+
+* `uint32_m min_frame_size` - the third value in the streaminfo metadata block; "The minimum frame size (in bytes) used in the stream."
+
+* `uint32_m max_frame_size` - the fourth value in the streaminfo metadata block; "The maximum frame size (in bytes) used in the stream."
+
+* `uint32_m sample_rate` - the fifth value in the streaminfo metadata block; "Sample rate in Hz."
+
+* `uint8_m num_channels` - the sixth value in the streaminfo metadata block; "(number of channels)-1."
+
+* `uint8_m bits_per_sample` - the seventh value in the streaminfo metadata block; "	(bits per sample)-1."
+
+* `uint64_m num_samples` - the eight value in the streaminfo metadata block; "Total number of interchannel samples in the stream."
+
+* `uint64_m low_checksum` - the low bytes of the ninth value in the streaminfo metadata block; low bytes of "MD5 checksum of the unencoded audio data."
+
+* `uint64_m high_checksum` - the high bytes of the ninth value in the streaminfo metadata block; high bytes of "MD5 checksum of the unencoded audio data."
+
 # Result
 
 The type `muafResult` (typedef for `uint32_m`) is defined to represent how a task went. Result values can be "fatal" (meaning that the task completely failed to execute, and the program will continue as if the task had never been attempted), "non-fatal" (meaning that the task partially failed, but was still able to complete the task), and "successful" (meaning that the task fully succeeded as intended).
@@ -561,6 +611,22 @@ The following values are defined for `muafResult` (all values not explicitly sta
 * `MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE` - the WAVE chunk fmt-ck's PCM-format-specific value 'wBitsPerSample' has an invalid value; it's rather equal to 0, non-divisible by 8 without a remainder, doesn't evenly divide the length of the wave data, or doesn't align with the value for wBlockAlign.
 
 * `MUAF_INVALID_WAVE_FILE_WRITE_SIZE` - the WAVE file could not be created, as the size of the WAVE file would be over the maximum file size of a WAVE file due to any of the limitations of how big certain values can be encoded in WAVE (such as the ckSize for the RIFF chunk).
+
+### FLAC result values
+
+* `MUAF_INVALID_FLAC_STREAMINFO_LENGTH` - the streaminfo metadata block has an invalid recorded length (not 34 bytes).
+
+* `MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_RANGE` - the listed minimum or maximum block size within streaminfo was not within the required value range of 16 to 65535.
+
+* `MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_MIN_MAX` - the listed minimum and maximum block size within streaminfo do not make sense, as the maximum is smaller than the minimum.
+
+* `MUAF_INVALID_FLAC_STREAMINFO_FRAME_SIZE_MIN_MAX` - the listed minimum and maximum frame size within streaminfo do not make sense, as the maximum is smaller than the minimum.
+
+* `MUAF_INVALID_FLAC_STREAMINFO_NUM_CHANNELS` - the listed number of channels within streaminfo (after accounting for subtraction) is not within the permitted range of 1 to 8. This value is permitted to be zero (after accounting for subtraction) if no audio is being stored.
+
+* `MUAF_INVALID_FLAC_STREAMINFO_BITS_PER_SAMPLE` - the listed bits per sample within streaminfo (after accounting for subtraction) is not within the permitted range of 4 to 32. This value is permitted to be zero (after accounting for subtraction) if no audio is being stored.
+
+* `MUAF_INVALID_FLAC_STREAMINFO_SAMPLE_COUNT` - the listed amount of samples doesn't make sense, rather because the FLAC file doesn't contain audio and the sample count is over 0, or because the FLAC file does contain audio and the sample count is 0.
 
 ## Check if result is fatal
 
