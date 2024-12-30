@@ -7,9 +7,7 @@ No warranty implied; use at your own risk.
 Licensed under MIT License or public domain, whichever you prefer.
 More explicit license information at the end of file.
 
-@TODO Overview section, not just terminology
-@TODO Add wave data size check (if haven't already)
-@TODO More concise handling for audio files with no audio data (?)
+@TODO Confirm 24-bit PCM WAVE writing works
 
 @DOCBEGIN
 
@@ -43,7 +41,7 @@ Demos are designed for muaf to both test its functionality and to allow users to
 
 ## Demo resources
 
-The demos use other files to operate correctly when running as a compiled executable. These other files can be found in the `resources` folder within `demos`, and this folder is expected to be in the same location that the program is executing from. For example, if a user compiles a demo into `main.exe`, and decides to run it, the `resources` folder from `demos` should be in the same directory as `main.exe`.
+The demos use other files to operate correctly when running as a compiled executable. These other files can be found in the `resources` folder within `demos`, and this folder is expected to be in the same location that the program is executing from. For exmaple, if a user compiles a demo into `main.exe`, and decides to run it, the `resources` folder from `demos` should be in the same directory as `main.exe`.
 
 # Licensing
 
@@ -835,190 +833,54 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 		// @DOCLINE > Note that mu libraries store their dependencies within their files, so you don't need to import these dependencies yourself; this section's purpose is purely to provide more information about the contents that this file defines. The libraries listed may also have other dependencies that they also include that aren't explicitly listed here.
 
+	// @DOCLINE # Version
+
+		// @DOCLINE The macros `MUAF_VERSION_MAJOR`, `MUAF_VERSION_MINOR`, and `MUAF_VERSION_PATCH` are defined to match its respective release version, following the format of `MAJOR.MINOR.PATCH`.
+
+		#define MUAF_VERSION_MAJOR 1
+		#define MUAF_VERSION_MINOR 0
+		#define MUAF_VERSION_PATCH 0
+
 	MU_CPP_EXTERN_START
 
 	typedef uint32_m muafResult;
 
-	// @DOCLINE # Terminology
+	// @DOCLINE # Audio file formats
 
-		// @DOCLINE This section provides a general overview of muaf's terminology in relation to audio and how audio data is handled in muaf, since a significant portion of audio terminology is not agreed upon.
+		typedef uint8_m muafFileFormat;
 
-		// @DOCLINE The smallest unit of audio data is a '***sample***', which represents a single point of audio signal amplitude at one moment in time. In an audio file, multiple samples can be provided for the same moment in time in the form of '***channels***', which can be used for [stereo audio](https://en.wikipedia.org/wiki/Stereophonic_sound) and such. A '***frame***' contains each sample per channel, interleaved one after the other. So, if a frame had two samples it in, the first sample would be for channel 0, and the second sample would be for channel 1.
+		// @DOCLINE The type `muafFileFormat` (typedef for `uint8_m`) represents a file format supported in muaf, and has the following defined values:
 
-		// @DOCLINE Audio files are expected to be played at a certain integer '***sample rate***', indicating how many samples *per channel* should be played each second. Since the sample rate value is based on one channel, the sample rate does not increase along with the amount of channels; the sample rate can more accurately described as the 'frame rate', as it more concisely indicates the amount of frames per second, but since the term 'frame rate' is already commonly associated with [video frame rate](https://en.wikipedia.org/wiki/Frame_rate), and the term 'sample rate' is fairly standardized, muaf uses the term 'sample rate'.
+		// @DOCLINE * `MUAF_UNKNOWN` - an unknown and/or unrecognized file format.
+		#define MUAF_UNKNOWN 0
+		// @DOCLINE * `MUAF_WAVE` - the [WAVE file format](#wave-api).
+		#define MUAF_WAVE 1
+		// @DOCLINE * `MUAF_FLAC` - the [FLAC file format](#flac-api).
+		#define MUAF_FLAC 2
 
-		// @DOCLINE An '***audio format***' refers to how audio data can be laid out in a manner recognized and supported by muaf. In an '***uncompressed***' audio format, frames are simply stored one after the other chronologically, and in a type whose sample values are directly readable as an integer or decimal value in C. In a '***compressed***' audio format, frames are *not* stored one after the other, but instead are organized into '***packets***', which can contain any number of '***explicit or implicit frames***'. If frames are explicitly listed in a packet, that means that all frames' values are listed out one after the other in an uncompressed manner within that packet. If frames are implicitly listed, that means that some frames' values are not directly laid out in the data, but are instead implied based on other values, and need to be worked out manually to retrieve any readable frame data.
+		// @DOCLINE ## Audio file format names
 
-		// @DOCLINE An audio file's '***raw data***' refers to the raw audio data based on the audio format. This means that, for example, if the audio format is compressed, the raw data describes the frames as they're listed in the data, explicit or implicit, leaving it to the user to work out the sample values for the frames manually if they are implicit.
+			#ifdef MUAF_NAMES
 
-		// @DOCLINE An audio file's '***decompressed data***' refers to uncompressed audio data, whether or not it was generated from compressed or uncompressed audio data. If the given audio data's format is uncompressed, then the decompressed data simply refers to the raw data. However, if the given audio data's format is compressed, then the decompressed data refers to the raw data's equivalent uncompressed audio data. In other words, the decompressed data refers to the decompressed version of the raw data (whether or not it was compressed in the first place).
+			// @DOCLINE The name function `muaf_audio_file_format_get_name` returns a `const char*` representation of a given audio file format (for example, `MUAF_WAVE` returns "MUAF_WAVE"), defined below: @NLNT
+			MUDEF const char* muaf_audio_file_format_get_name(muafFileFormat format);
 
-		// @DOCLINE The terminology listed above for muaf does not apply when muaf is referencing the specification of another audio file format. In those instances, the specification's terminology applies.
+			// @DOCLINE This function returns "MUAF_UNKNOWN" in the case that `format` is an unrecognized value.
+			// @DOCLINE > This function is a "name" function, and therefore is only defined if `MUAF_NAMES` is also defined.
 
-	// @DOCLINE # Format-unspecific reading API
+			#endif
 
-		// @DOCLINE muaf's reading API is split into two sections: the format-specific API, and the format-unspecific API. The unspecific API wraps around the specific API, encapsulating the specific API's functionality, and allowing you to retrieve general information about an audio file without having to directly consider what specific audio file format it is.
+		// @DOCLINE ## Audio file format nice names
 
-		// @DOCLINE ## Audio profile
+			#ifdef MUAF_NAMES
 
-			// @DOCLINE For each audio format, general information about the audio stored in the file can be retrieved. This general information is called the "profile". This profile is defined for several reasons:
+			// @DOCLINE The name function `muaf_audio_file_format_get_nice_name` returns a presentable `const char*` representation of a given audio file format (for example, `MUAF_WAVE` returns "WAVE (.wav, .wave)"), defined below: @NLNT
+			MUDEF const char* muaf_audio_file_format_get_nice_name(muafFileFormat format);
 
-			// @DOCLINE * It gives the user a way to load general information about the audio file first, before taking more processing time and memory to load more significant portions of the data stored within the audio file.
+			// @DOCLINE This function returns "Unknown" in the case that `format` is an unrecognized value.
+			// @DOCLINE > This function is a "name" function, and therefore is only defined if `MUAF_NAMES` is also defined.
 
-			// @DOCLINE * Having this information gives the user a way to load select portions of the audio data encoded in the file without ever having to load the whole audio file at once in memory, which can be useful or even necessary for larger audio files.
-
-			// @DOCLINE * It allows the API to internally map how the file is formatted and hold onto that information for later, which can make subsequent calls to load information from the audio file quicker, since information about the file's general structure is held onto across function calls.
-
-			// @DOCLINE In the format-specific API, the profile stores general information that very directly corresponds to the general information stored in the audio file itself. For example, [the WAVE profile](#wave-profile) stores information about what supported chunks are provided in the file and where they are. It also stores the information within certain chunks that provide general information about the audio, such as the fmt chunk, which provides information such as the number of channels.
-
-			// @DOCLINE In the format-unspecific API, the profile primarily stores general information that all of the supported audio file formats within muaf have in common. This allows the user to retrieve information about the audio file without having to know how to retrieve it from the exact audio file format that it's in. The unspecific profile also loads and stores the specific profile information.
-
-			typedef struct muafUnspecificProfile muafUnspecificProfile;
-			// @DOCLINE An audio file's unspecific profile can be retrieved using the function `mu_get_audio_file_profile`, defined below: @NLNT
-			MUDEF muafResult mu_get_audio_file_profile(const char* filename, muafUnspecificProfile* profile);
-
-			// @DOCLINE Once an unspecific profile has been successfully or non-fatally retrieved (indicated by [the result return value](#result)), the profile is filled with data, some of which may be manually allocated automatically. To free this data, use the function `mu_free_audio_file_profile`, defined below: @NLNT
-			MUDEF void mu_free_audio_file_profile(muafUnspecificProfile* profile);
-
-			// @DOCLINE The unspecific profile is represented by the struct `muafUnspecificProfile`, which has the following members:
-
-			// This union is described later, make sure it's updated properly!
-			typedef struct muWAVEProfile muWAVEProfile;
-			union muafSpecificProfile {
-				muWAVEProfile* WAVE;
-			};
-			typedef union muafSpecificProfile muafSpecificProfile;
-
-			typedef uint32_m muafSampleRate;
-			typedef uint64_m muafFrames;
-			typedef uint16_m muafChannels;
-			typedef uint8_m muafFileFormat;
-			typedef uint32_m muafAudioFormat;
-			struct muafUnspecificProfile {
-				// @DOCLINE * `@NLFT num_frames` - the number of frames (`@NLFT` typedef for `uint64_m`).
-				muafFrames num_frames;
-				// @DOCLINE * `@NLFT sample_rate` - the amount of samples that should be played every second per channel (`@NLFT` typedef for `uint32_m`).
-				muafSampleRate sample_rate;
-				// @DOCLINE * `@NLFT num_channels` - the number of channels (`@NLFT` typedef for `uint16_m`).
-				muafChannels num_channels;
-				// @DOCLINE * `@NLFT audio_format` - the [audio format](#audio-formats) (`@NLFT` typedef for `uint32_m`).
-				muafAudioFormat audio_format;
-				// @DOCLINE * `@NLFT file_format` - the [file format](#audio-file-formats) (`@NLFT` typedef for `uint8_m`).
-				muafFileFormat file_format;
-				// @DOCLINE * `@NLFT specific` - the [format-specific profile](#format-specific-profile).
-				muafSpecificProfile specific;
-			};
-
-			// @DOCLINE ### Audio formats
-
-				// @DOCLINE The type `muafAudioFormat` (typedef for `uint32_m`) represents an audio format supported in muaf. Each audio format has a corresponding type that represents how each sample/packet is stored. If an audio format's corresponding type is an integer/decimal type, then the audio format is uncompressed, and vice versa.
-
-				// @DOCLINE The type `muafAudioFormat` has the following defined values:
-
-				// @DOCLINE * `MUAF_FORMAT_UNKNOWN` - unknown or unsupported audio format.
-				#define MUAF_FORMAT_UNKNOWN 0
-
-				// @DOCLINE #### PCM audio formats
-				// 1 to 63 //
-					// @DOCLINE * `MUAF_FORMAT_PCM_U8` - unsigned 8-bit PCM (range 0 to 255, 0x00 to 0xFF). Corresponding type is `uint8_m`.
-					#define MUAF_FORMAT_PCM_U8  1
-
-					// #define MUAF_FORMAT_PCM_S8  2
-					// #define MUAF_FORMAT_PCM_U16 3
-
-					// @DOCLINE * `MUAF_FORMAT_PCM_S16` - signed 16-bit PCM (range -32768 to 32767, -0x8000 to 0x7FFF). Corresponding type is `int16_m`.
-					#define MUAF_FORMAT_PCM_S16 4
-
-					// #define MUAF_FORMAT_PCM_U24 5
-					// #define MUAF_FORMAT_PCM_S24 6
-					// #define MUAF_FORMAT_PCM_U32 7
-
-					// @DOCLINE * `MUAF_FORMAT_PCM_S32` - signed 32-bit PCM (range -2147483648 to 2147483647, -0x80000000 to 0x7FFFFFFF). Corresponding type is `int32_m`.
-					#define MUAF_FORMAT_PCM_S32 8
-
-					// #define MUAF_FORMAT_PCM_U64 9
-
-					// @DOCLINE * `MUAF_FORMAT_PCM_S64` - signed 64-bit PCM (range -9223372036854775808 to 9223372036854775807, -0x8000000000000000 to 0x7FFFFFFFFFFFFFFF). Corresponding type is `int64_m`.
-					#define MUAF_FORMAT_PCM_S64 10
-
-				// @DOCLINE #### Audio format names
-
-					#ifdef MUAF_NAMES
-
-					// @DOCLINE The name function `muaf_audio_format_get_name` returns a `const char*` representation of a given audio format (for example, `MUAF_FORMAT_PCM_U8` returns "MUAF_FORMAT_PCM_U8"), defined below: @NLNT
-					MUDEF const char* muaf_audio_format_get_name(muafAudioFormat format);
-
-					// @DOCLINE This function returns "MUAF_FORMAT_UNKNOWN" in the case that `format` is an unrecognized value.
-					// @DOCLINE > This function is a "name" function, and therefore is only defined if `MUAF_NAMES` is also defined.
-
-					#endif
-
-				// @DOCLINE #### Audio format nice names
-
-					#ifdef MUAF_NAMES
-
-					// @DOCLINE The name function `muaf_audio_format_get_nice_name` returns a presentable `const char*` representation of a given audio format (for example, `MUAF_FORMAT_PCM_U8` returns "8-bit unsigned PCM"), defined below: @NLNT
-					MUDEF const char* muaf_audio_format_get_nice_name(muafAudioFormat format);
-
-					// @DOCLINE This function returns "Unknown" in the case that `format` is an unrecognized value.
-					// @DOCLINE > This function is a "name" function, and therefore is only defined if `MUAF_NAMES` is also defined.
-
-					#endif
-
-				// @DOCLINE #### Get audio format compression
-
-					// @DOCLINE The function `muaf_audio_format_compressed` returns if a given audio format is compressed, defined below: @NLNT
-					MUDEF muBool muaf_audio_format_compressed(muafAudioFormat format);
-
-					// @DOCLINE This function returns `MU_FALSE` if the given format is unrecognized.
-
-				// @DOCLINE #### Get audio format sample size
-
-					// @DOCLINE The function `muaf_audio_format_sample_size` returns the size of a single sample for an uncompressed audio format, defined below: @NLNT
-					MUDEF size_m muaf_audio_format_sample_size(muafAudioFormat format);
-
-					// @DOCLINE If the given format is compressed or unrecognized, this function returns 0.
-
-			// @DOCLINE ### Audio file formats
-
-				// @DOCLINE The type `muafFileFormat` (typedef for `uint8_m`) represents a file format supported in muaf, and has the following defined values:
-
-				// @DOCLINE * `MUAF_UNKNOWN` - an unknown and/or unrecognized file format.
-				#define MUAF_UNKNOWN 0
-				// @DOCLINE * `MUAF_WAVE` - the [WAVE file format](#wave-api).
-				#define MUAF_WAVE 1
-				// @DOCLINE * `MUAF_FLAC` - the [FLAC file format](#flac-api).
-				#define MUAF_FLAC 2
-
-				// @DOCLINE #### Audio file format names
-
-					#ifdef MUAF_NAMES
-
-					// @DOCLINE The name function `muaf_audio_file_format_get_name` returns a `const char*` representation of a given audio file format (for example, `MUAF_WAVE` returns "MUAF_WAVE"), defined below: @NLNT
-					MUDEF const char* muaf_audio_file_format_get_name(muafFileFormat format);
-
-					// @DOCLINE This function returns "MUAF_UNKNOWN" in the case that `format` is an unrecognized value.
-					// @DOCLINE > This function is a "name" function, and therefore is only defined if `MUAF_NAMES` is also defined.
-
-					#endif
-
-				// @DOCLINE #### Audio file format nice names
-
-					#ifdef MUAF_NAMES
-
-					// @DOCLINE The name function `muaf_audio_file_format_get_nice_name` returns a presentable `const char*` representation of a given audio file format (for example, `MUAF_WAVE` returns "WAVE (.wav, .wave)"), defined below: @NLNT
-					MUDEF const char* muaf_audio_file_format_get_nice_name(muafFileFormat format);
-
-					// @DOCLINE This function returns "Unknown" in the case that `format` is an unrecognized value.
-					// @DOCLINE > This function is a "name" function, and therefore is only defined if `MUAF_NAMES` is also defined.
-
-					#endif
-
-			// @DOCLINE ### Format specific profile
-
-				// @DOCLINE The union `muafSpecificProfile` acts as a container for the format-specific profile of some audio file, and has the following members:
-
-				// @DOCLINE * `muWAVEProfile* WAVE` - the [WAVE profile](#wave-profile).
+			#endif
 
 		// @DOCLINE ## Get audio file format
 
@@ -1027,96 +889,150 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 			// @DOCLINE This function does not use the filename extension to identify the audio file format, but instead, the actual contents of the file itself. This function returns `MUAF_UNKNOWN` if rather the audio file format could not be identified to be anything supported in muaf, or muaf failed to retrieve the file's data.
 
-		// @DOCLINE ## Reading audio data
+	// @DOCLINE # Audio formats
 
-			// @DOCLINE This section covers the functionality for reading audio data.
+		typedef uint32_m muafAudioFormat;
 
-			// @DOCLINE ### Read uncompressed raw data
+		// @DOCLINE The type `muafAudioFormat` (typedef for `uint32_m`) represents a decompressed audio format supported for reading and writing in muaf. Each audio format has a corresponding type that represents how each decompressed sample is stored.
 
-				// @DOCLINE The function `mu_read_uncompressed_audio_file` reads an uncompressed audio file's raw data, defined below: @NLNT
-				MUDEF muafResult mu_read_uncompressed_audio_file(const char* filename, muafUnspecificProfile* profile, muafFrames beg_frame, muafFrames frame_len, void* data);
+		// @DOCLINE The type `muafAudioFormat` has the following defined values:
 
-				// @DOCLINE The profile given must be a valid loaded profile from a file that has gone unchanged since the profile was initially loaded. The given audio file's audio format must be uncompressed. The frame range provided must be valid; this function does not check if the given frame range is valid. The given data must match the corresponding type of the profile's audio format (which itself must be a supported and defined value for `muafAudioFormat`), and `data` must be large enough to hold the requested amount of frames.
+		// @DOCLINE * `MUAF_FORMAT_UNKNOWN` - unknown or unsupported audio format.
+		#define MUAF_FORMAT_UNKNOWN 0
 
-		// @DOCLINE ## Writing audio data
+		// @DOCLINE * `MUAF_FORMAT_PCM_U8` - unsigned 8-bit PCM (range 0 to 255, 0x00 to 0xFF). Corresponding type is `uint8_m`. Supported by:
+		// @DOCLINE     * WAVE.
+		#define MUAF_FORMAT_PCM_U8  1
 
-			// @DOCLINE This section covers the functionality for writing audio data.
+		// @DOCLINE * `MUAF_FORMAT_PCM_S8` - signed 8-bit PCM (range -128 to 127, -0x80 to 0x7F). Corresponding type is `int8_m`. Supported by:
+		// @DOCLINE     * FLAC.
+		#define MUAF_FORMAT_PCM_S8  2
 
-			// @DOCLINE ### Audio wrapper
+		//#define MUAF_FORMAT_PCM_U12 3
+		//#define MUAF_FORMAT_PCM_S12 4
+		//#define MUAF_FORMAT_PCM_U16 5
 
-				typedef struct muWAVEWrapper muWAVEWrapper;
-				// This union is described later. Make sure it stays updated!
-				union muafSpecificWrapper {
-					muWAVEWrapper* WAVE;
-				};
-				typedef union muafSpecificWrapper muafSpecificWrapper;
+		// @DOCLINE * `MUAF_FORMAT_PCM_S16` - signed 16-bit PCM (range -32768 to 32767, -0x8000 to 0x7FFF). Corresponding type is `int16_m`. Supported by:
+		// @DOCLINE     * WAVE.
+		// @DOCLINE     * FLAC.
+		#define MUAF_FORMAT_PCM_S16 6
 
-				typedef struct muafUnspecificWrapper muafUnspecificWrapper;
+		//#define MUAF_FORMAT_PCM_U20 7
+		//#define MUAF_FORMAT_PCM_S20 8
+		//#define MUAF_FORMAT_PCM_U24 9
 
-				// @DOCLINE muaf is designed to be able to write an audio file across multiple function calls. In particular, it is designed this way so that not all of the audio data needs to be readily available at one moment in memory in order for all of the audio to be successfully encoded into the audio file.
+		// @DOCLINE * `MUAF_FORMAT_PCM_S24` - signed 24-bit PCM (range -8388608 to 8388607, -0x800000 to 0x7FFFFF). Corresponding type is `int32_m`. Supported by:
+		// @DOCLINE     * WAVE.
+		// @DOCLINE     * FLAC.
+		#define MUAF_FORMAT_PCM_S24 10
 
-				// @DOCLINE The primary way that muaf achieves this is by encapsulating writing audio data into a ***wrapper***, which describes an audio file that may be in the process of being written to. An audio file being written using a wrapper is only successfully fully encoded when the wrapper has been created and, afterwards, all of the audio frames have been written once and once only. Audio frames do not need to be written in any particular order.
+		//#define MUAF_FORMAT_PCM_U32 11
 
-				// @DOCLINE The function `mu_create_audio_file_wrapper` creates an audio file with no audio encoded in it based on the given wrapper information, defined below: @NLNT
-				MUDEF muafResult mu_create_audio_file_wrapper(const char* filename, muafUnspecificWrapper* wrapper);
+		// @DOCLINE * `MUAF_FORMAT_PCM_S32` - signed 32-bit PCM (range -2147483648 to 2147483647, -0x80000000 to 0x7FFFFFFF). Corresponding type is `int32_m`. Supported by:
+		// @DOCLINE     * WAVE.
+		// @DOCLINE     * FLAC.
+		#define MUAF_FORMAT_PCM_S32 12
 
-				// @DOCLINE Once an unspecific wrapper has been successfully or non-fatally retrieved, the wrapper is filled with data, some of which may be manually allocated automatically. To free this data, use the function `mu_free_audio_file_wrapper`, defined below: @NLNT
-				MUDEF void mu_free_audio_file_wrapper(muafUnspecificWrapper* wrapper);
+		// #define MUAF_FORMAT_PCM_U64 13
 
-				// @DOCLINE All of the parameters within `wrapper` meant to be set by the user should be set before calling this function. Once this function has successfully or non-fatally executed, the file will be created, but it is not guaranteed to be properly encoded until all audio frames have been written once and once only.
+		// @DOCLINE * `MUAF_FORMAT_PCM_S64` - signed 64-bit PCM (range -9223372036854775808 to 9223372036854775807, -0x8000000000000000 to 0x7FFFFFFFFFFFFFFF). Corresponding type is `int64_m`. Supported by:
+		// @DOCLINE     * WAVE.
+		#define MUAF_FORMAT_PCM_S64 14
 
-				// @DOCLINE The struct `muafUnspecificWrapper` represents an unspecific audio file wrapper, and has the following members:
-				struct muafUnspecificWrapper {
-					// @DOCLINE * `@NLFT num_frames` - the number of frames (`@NLFT` typedef for `uint64_m`).
-					muafFrames num_frames;
-					// @DOCLINE * `@NLFT sample_rate` - the amount of samples that should be played every second per channel (`@NLFT` typedef for `uint32_m`).
-					muafSampleRate sample_rate;
-					// @DOCLINE * `@NLFT num_channels` - the number of channels (`@NLFT` typedef for `uint16_m`).
-					muafChannels num_channels;
-					// @DOCLINE * `@NLFT audio_format` - the [audio format](#audio-formats) (`@NLFT` typedef for `uint32_m`).
-					muafAudioFormat audio_format;
-					// @DOCLINE * `@NLFT file_format` - the [file format](#audio-file-formats) (`@NLFT` typedef for `uint8_m`).
-					muafFileFormat file_format;
-					// @DOCLINE * `@NLFT specific` - the [format-specific wrapper](#format-specific-wrapper). This is filled in automatically after a call to `mu_create_audio_file_wrapper`.
-					muafSpecificWrapper specific;
-				};
+		// @DOCLINE ## Audio format names
 
-			// @DOCLINE ### Format specific wrapper
+			#ifdef MUAF_NAMES
 
-				// @DOCLINE The union `muafSpecificWrapper` represents the wrapper of a particular audio file format, and has the following members:
+			// @DOCLINE The name function `muaf_audio_format_get_name` returns a `const char*` representation of a given audio format (for example, `MUAF_FORMAT_PCM_U8` returns "MUAF_FORMAT_PCM_U8"), defined below: @NLNT
+			MUDEF const char* muaf_audio_format_get_name(muafAudioFormat format);
 
-				// @DOCLINE * `muWAVEWrapper* WAVE` - the [WAVE wrapper](#wave-wrapper).
+			// @DOCLINE This function returns "MUAF_FORMAT_UNKNOWN" in the case that `format` is an unrecognized value.
+			// @DOCLINE > This function is a "name" function, and therefore is only defined if `MUAF_NAMES` is also defined.
 
-			// @DOCLINE ### Write raw audio frames
+			#endif
 
-				// @DOCLINE The function `mu_write_uncompressed_audio_file` writes frames to an uncompressed audio file, defined below: @NLNT
-				MUDEF muafResult mu_write_uncompressed_audio_file(const char* filename, muafUnspecificWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, void* data);
+		// @DOCLINE ## Audio format nice names
 
-				// @DOCLINE The given wrapper must have its contents unaltered by the user since its original call to [`mu_create_audio_file_wrapper`](#audio-wrapper), and its audio format must be uncompressed. Once all audio frames have been written to the audio file once and once only, the file should be properly encoded.
+			#ifdef MUAF_NAMES
 
-				// @DOCLINE The given data `data` may be altered during a call to this function, and may not be the same once the function has finished.
+			// @DOCLINE The name function `muaf_audio_format_get_nice_name` returns a presentable `const char*` representation of a given audio format (for example, `MUAF_FORMAT_PCM_U8` returns "8-bit unsigned PCM"), defined below: @NLNT
+			MUDEF const char* muaf_audio_format_get_nice_name(muafAudioFormat format);
 
-			// @DOCLINE ### Get wrapper from audio file
+			// @DOCLINE This function returns "Unknown" in the case that `format` is an unrecognized value.
+			// @DOCLINE > This function is a "name" function, and therefore is only defined if `MUAF_NAMES` is also defined.
 
-				// @DOCLINE The function `mu_get_audio_file_wrapper` fills in information for an audio file wrapper based on the contents of another audio file, defined below: @NLNT
-				MUDEF muafResult mu_get_audio_file_wrapper(muafUnspecificProfile* profile, muafUnspecificWrapper* wrapper);
+			#endif
 
-				// @DOCLINE The parameter `profile` should be [retrieved beforehand](#audio-profile) from an existing file, and the given audio file should have [a supported unspecific audio format equivalent](#wave-format-to-unspecific-audio-format).
+		// @DOCLINE ## Get audio format support
 
-				// @DOCLINE The members of `wrapper` will be filled in based on the given audio file described by `profile`, except for any members that are set by the function [`mu_create_audio_file_wrapper`](#audio-wrapper).
+			// @DOCLINE The function `muaf_audio_format_supported` returns whether or not a given audio format is compatible for reading and writing with a given audio file format, defined below: @NLNT
+			MUDEF muBool muaf_audio_format_supported(muafFileFormat file_format, muafAudioFormat audio_format);
+
+			// @DOCLINE This function returns `MU_FALSE` if the given file format or audio format is unrecognized.
+
+		// @DOCLINE ## Get audio format sample size
+
+			// @DOCLINE The function `muaf_audio_format_sample_size` returns the size of an audio format's corresponding type, defined below: @NLNT
+			MUDEF size_m muaf_audio_format_sample_size(muafAudioFormat format);
+
+			// @DOCLINE If the given format is unrecognized, this function returns 0.
+
+		// @DOCLINE ## Is audio format PCM
+
+			// @DOCLINE The macro function `MUAF_FORMAT_IS_PCM` takes in a format, and forms an expression that represents whether or not the given format is a PCM format, defined below: @NLNT
+			#define MUAF_FORMAT_IS_PCM(format) (format >= MUAF_FORMAT_PCM_U8 && format <= MUAF_FORMAT_PCM_S64)
 
 	// @DOCLINE # WAVE API
 
 		// @DOCLINE This section describes muaf's API for the [Waveform Audio File Format](https://en.wikipedia.org/wiki/WAV), or WAVE. The code for this API is built based off of the original August 1991 specification for WAVE (specifically [this archive](https://www.mmsp.ece.mcgill.ca/Documents/AudioFormats/WAVE/Docs/riffmci.pdf)), and this section of muaf's documentation will reference concepts that are defined in this specification.
 
+		// @DOCLINE ## Reading WAVE audio data
+
+			typedef struct muWAVEProfile muWAVEProfile;
+
+			// @DOCLINE This section covers the functionality for reading WAVE audio data.
+
+			// @DOCLINE ### Read PCM WAVE data
+
+				// @DOCLINE The function `mu_read_WAVE_PCM` reads frames from a WAVE file encoded in PCM, defined below: @NLNT
+				MUDEF muafResult mu_read_WAVE_PCM(const char* filename, muWAVEProfile* profile, uint32_m beg_frame, uint32_m frame_len, void* data);
+
+				// @DOCLINE The given and already loaded [WAVE profile](#wave-profile) must have a [supported audio format](#audio-formats), and said audio format [must be PCM](#is-audio-format-pcm). The given frame range must be valid for the given WAVE file, and the given data must be large enough to hold the requested amount of frames in the audio format's corresponding type.
+
+			// @DOCLINE ### Get WAVE audio format
+
+				// @DOCLINE The function `mu_get_WAVE_audio_format` returns the [audio format](#audio-formats) that a WAVE file is encoded in, defined below: @NLNT
+				MUDEF muafAudioFormat mu_get_WAVE_audio_format(muWAVEProfile* profile);
+
+				// @DOCLINE If the given and already loaded [WAVE profile](#wave-profile) does not have a [supported audio format](#audio-formats) equivalent, this function returns `MUAF_FORMAT_UNKNOWN`.
+
+		// @DOCLINE ## Writing WAVE audio data
+
+			typedef struct muWAVEWrapper muWAVEWrapper;
+
+			// @DOCLINE This section covers the functionality for writing WAVE audio data.
+
+			// @DOCLINE ### Write PCM WAVE data
+
+				// @DOCLINE The function `mu_write_WAVE_PCM` writes frames to a WAVE file encoded in PCM, defined below: @NLNT
+				MUDEF muafResult mu_write_WAVE_PCM(const char* filename, muWAVEWrapper* wrapper, uint32_m beg_frame, uint32_m frame_len, void* data);
+
+				// @DOCLINE The given and already created [WAVE wrapper](#wave-wrapper) must have [a PCM audio format](#is-audio-format-pcm). The given frame range must be valid for the given WAVE wrapper, and the given data must hold the amount of frames specified in the audio format's corresponding type.
+
+				// @DOCLINE The data passed into this function may be changed by this function.
+
+				// @DOCLINE This function can be called on any valid frame range any number of times in any order.
+
 		// @DOCLINE ## WAVE profile
 
-			// This union is described later. Make sure it stays updated!
 			typedef struct muWAVEPCM muWAVEPCM;
+			typedef union muWAVEFormatSpecificFields muWAVEFormatSpecificFields;
+			typedef struct muWAVEChunks muWAVEChunks;
+
+			// This union is described later. Make sure it stays updated!
 			union muWAVEFormatSpecificFields {
 				muWAVEPCM* wave_pcm;
 			};
-			typedef union muWAVEFormatSpecificFields muWAVEFormatSpecificFields;
 
 			// This struct is described later. Make sure it stays updated!
 			struct muWAVEChunks {
@@ -1133,7 +1049,6 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				size_m assoc_data;
 				uint32_m assoc_data_len;
 			};
-			typedef struct muWAVEChunks muWAVEChunks;
 
 			// @DOCLINE A WAVE file's profile can be retrieved with the function `mu_get_WAVE_profile`, defined below: @NLNT
 			MUDEF muafResult mu_get_WAVE_profile(const char* filename, muWAVEProfile* profile);
@@ -1159,123 +1074,82 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				muWAVEChunks chunks;
 			};
 
-			// @DOCLINE ### WAVE format specific fields
+		// @DOCLINE ## WAVE formats
 
-				// @DOCLINE The union `muWAVEFormatSpecificFields` represents any data specific to a value for wFormatTag in the format-specific-fields portion of the fmt chunk. It has the following members:
+			// @DOCLINE This section lists every supported WAVE format, including a macro for its supported wFormatTag value in WAVE's specification, and its [format-specific-fields data](#wave-format-specific-fields) (if any).
 
-				// @DOCLINE * `muWAVEPCM* wave_pcm` - the format-specific-fields data for the [WAVE PCM format](#wave-pcm-format).
+			// @DOCLINE ### WAVE PCM format
 
-			// @DOCLINE ### WAVE formats
+				// @DOCLINE The WAVE PCM format represents the wFormatTag value WAVE_FORMAT_PCM, Microsoft's pulse code modulation format. Its macro is `MU_WAVE_FORMAT_PCM`, which is defined as the value `0x0001`.
+				#define MU_WAVE_FORMAT_PCM 0x0001
 
-				// @DOCLINE This section lists every supported WAVE format, including a macro for its supported wFormatTag value in WAVE's specification, and its [format-specific-fields data](#wave-format-specific-fields) (if any).
-
-				// @DOCLINE #### WAVE PCM format
-
-					// @DOCLINE The WAVE PCM format represents the wFormatTag value WAVE_FORMAT_PCM, Microsoft's pulse code modulation format. Its macro is `MU_WAVE_FORMAT_PCM`, which is defined as the value `0x0001`.
-					#define MU_WAVE_FORMAT_PCM 0x0001
-
-					// @DOCLINE This format does store data in the [format-specific-fields portion of the fmt chunk](#wave-format-specific-fields). This data is represented by the struct `muWAVEPCM`, which has the following member:
-					struct muWAVEPCM {
-						// @DOCLINE * `@NLFT bits_per_sample` - the value of wBitsPerSample in format-specific-fields's PCM-format-specific form; the size of each sample, in bits.
-						uint16_m bits_per_sample;
-					};
-
-				// @DOCLINE ### WAVE format names
-
-					#ifdef MUAF_NAMES
-
-					// @DOCLINE The name function `mu_WAVE_format_get_name` returns a `const char*` representation of a given WAVE audio format (for example, `MU_WAVE_FORMAT_PCM` returns "MU_WAVE_FORMAT_PCM"), defined below: @NLNT
-					MUDEF const char* mu_WAVE_format_get_name(uint16_m format_tag);
-
-					// @DOCLINE This function returns "MU_UNKNOWN" in the case that `format_tag` is an unrecognized value.
-					// @DOCLINE > This function is a "name" function, and therefore is only defined if `MUAF_NAMES` is also defined.
-
-					#endif
-
-			// @DOCLINE ### WAVE chunks
-
-				// @DOCLINE The struct `muWAVEChunks` stores the index location of known chunks within the WAVE file. It has the following members:
-
-				// @DOCLINE * `size_m fmt` - the fmt-ck chunk.
-				// @DOCLINE * `uint32_m fmt_len` - the recorded length of the fmt-ck chunk.
-				// @DOCLINE * `size_m wave` - the wave-data chunk.
-				// @DOCLINE * `uint32_m wave_len` - the recorded length of the wave-data chunk.
-				// @DOCLINE * `size_m fact` - the fact-ck chunk.
-				// @DOCLINE * `uint32_m fact_len` - the recorded length of the fact-ck chunk.
-				// @DOCLINE * `size_m cue` - the cue-ck chunk.
-				// @DOCLINE * `uint32_m cue_len` - the recorded length of the cue-ck chunk.
-				// @DOCLINE * `size_m playlist` - the playlist-ck chunk.
-				// @DOCLINE * `uint32_m playlist_len` - the recorded length of the playlist-ck chunk.
-				// @DOCLINE * `size_m assoc_data` - the assoc-data-list chunk.
-				// @DOCLINE * `uint32_m assoc_data_len` - the recorded length of the assoc-data-list chunk.
-
-				// @DOCLINE If one of the index values defined above is set to 0, that indicates that the chunk doesn't appear within the WAVE file. If it is not set to 0, the chunk does appear within the WAVE file, and the index value indicates where in the file, starting at 0 for the first byte within the file and on.
-
-				// @DOCLINE The index values do *not* reference the index of the chunk (which would start at its ckID), but instead reference where the actual data for the chunk starts (which starts at ckData); the index values are an index to the chunk's ckData, not the chunk's ckID. This includes chunks that are wrapped in a LIST; chunks wrapped in a list (such as the assoc-data-list chunk) have their indexes and lengths referencing the LIST chunk itself.
-
-				// @DOCLINE A specification-compliant WAVE file will always have the chunks fmt-ck and wave-data. Although the specification does state that fmt-ck has to be defined before wave-data, muaf ignores this, and can successfully load files that don't follow this. The ignoring of this rule only applies when muaf is *reading* from a WAVE file; muaf follows this (and all other rules laid out in the specification) when *writing* a WAVE file.
-
-				// @DOCLINE Additionally, WAVE's specifications list chunks in a specific order (fmt-ck, fact-ck, cue-ck, playlist-ck, assoc-data-list, wave-data), but I am unaware if they necessarily *need* to be in this order (besides the previously mentioned rule that fmt-ck occurs before wave-data), so muaf permits WAVE files to have any chunks in any order, as long as fmt-ck and wave-data appear at some point. muaf writes WAVE files in the specified order, though.
-
-		// @DOCLINE ## Reading WAVE audio data
-
-			// @DOCLINE This section covers the functionality for reading WAVE audio data.
-
-			// @DOCLINE ### Read uncompressed raw WAVE data
-
-				// @DOCLINE The function `mu_read_WAVE_uncompressed` reads an uncompressed WAVE file's raw data, defined below: @NLNT
-				MUDEF muafResult mu_read_WAVE_uncompressed(const char* filename, muWAVEProfile* profile, muafFrames beg_frame, muafFrames frame_len, void* data);
-
-				// @DOCLINE Listed limitations from [the unspecific function to read raw audio frames](#read-uncompressed-raw-data) apply.
-
-			// @DOCLINE ### WAVE format to unspecific audio format
-
-				// @DOCLINE The function `mu_WAVE_unspecific_audio_format` converts a WAVE audio format to its supported [unspecific audio format](#audio-formats) equivalent, which muaf can then generally work with, defined below: @NLNT
-				MUDEF muafAudioFormat mu_WAVE_unspecific_audio_format(uint16_m format_tag, muWAVEFormatSpecificFields specific_fields);
-
-				// @DOCLINE If this function returns `MUAF_FORMAT_UNKNOWN`, then the given WAVE audio format information is unrecognized and/or unsupported, and muaf is unable to extract the data from it.
-
-		// @DOCLINE ## Writing WAVE audio data
-
-			// @DOCLINE This section covers the functionality for writing WAVE audio data.
-
-			// @DOCLINE ### WAVE wrapper
-
-				// @DOCLINE The function `mu_create_WAVE_wrapper` creates a WAVE file given WAVE wrapper information, defined below: @NLNT
-				MUDEF muafResult mu_create_WAVE_wrapper(const char* filename, muWAVEWrapper* wrapper);
-
-				// @DOCLINE The function `mu_free_WAVE_wrapper` frees any manually allocated data that might have been generated from its call to `mu_create_WAVE_wrapper`, defined below: @NLNT
-				MUDEF void mu_free_WAVE_wrapper(muWAVEWrapper* wrapper);
-
-				// @DOCLINE Listed limitations from [the unspecific functions to create/free a wrapper](#audio-wrapper) apply.
-
-				// @DOCLINE The struct `muWAVEWrapper` represents a WAVE file wrapper, and has the following members:
-				struct muWAVEWrapper {
-					// @DOCLINE * `@NLFT audio_format` - the [audio format](#audio-formats) of the WAVE file.
-					muafAudioFormat audio_format;
-					// @DOCLINE * `@NLFT num_frames` - the amount of frames in the WAVE file.
-					uint32_m num_frames;
-					// @DOCLINE * `@NLFT num_channels` - the number of channels.
-					uint16_m num_channels;
-					// @DOCLINE * `@NLFT sample_rate` - the amount of samples that should be played every second per channel.
-					uint32_m sample_rate;
-					// @DOCLINE * `@NLFT chunks` - the location of the chunks in the audio file. This is used internally, and should not be filled in by the user.
-					muWAVEChunks chunks;
+				// @DOCLINE This format does store data in the [format-specific-fields portion of the fmt chunk](#wave-format-specific-fields). This data is represented by the struct `muWAVEPCM`, which has the following member:
+				struct muWAVEPCM {
+					// @DOCLINE * `@NLFT bits_per_sample` - the value of wBitsPerSample in format-specific-fields's PCM-format-specific form; the size of each sample, in bits.
+					uint16_m bits_per_sample;
 				};
 
-			// @DOCLINE ### Write raw WAVE audio frames
+		// @DOCLINE ## WAVE format specific fields
 
-				// @DOCLINE The function `mu_write_WAVE_uncompressed` writes frames to an uncompressed WAVE file, defined below: @NLNT
-				MUDEF muafResult mu_write_WAVE_uncompressed(const char* filename, muWAVEWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, void* data);
+			// @DOCLINE The union `muWAVEFormatSpecificFields` represents any data specific to a value for wFormatTag in the format-specific-fields portion of the fmt chunk. It has the following members:
 
-				// @DOCLINE Listed limitations from [the unspecific function to write raw audio frames](#write-raw-audio-frames) apply.
+			// @DOCLINE * `muWAVEPCM* wave_pcm` - the format-specific-fields data for the [WAVE PCM format](#wave-pcm-format).
 
-			// @DOCLINE ### Get WAVE wrapper from audio file
+		// @DOCLINE ## WAVE chunks
 
-				// @DOCLINE The function `mu_get_WAVE_wrapper` fills in information for a WAVE wrapper based on the contents of another WAVE file, defined below: @NLNT
-				MUDEF muafResult mu_get_WAVE_wrapper(muWAVEProfile* profile, muWAVEWrapper* wrapper);
+			// @DOCLINE The struct `muWAVEChunks` stores the index location of known chunks within the WAVE file. It has the following members:
 
-				// @DOCLINE Listed limitations from [the unspecific function to get a wrapper from an audio file](#get-wrapper-from-audio-file) apply.
+			// @DOCLINE * `size_m fmt` - the fmt-ck chunk.
+			// @DOCLINE * `uint32_m fmt_len` - the recorded length of the fmt-ck chunk.
+			// @DOCLINE * `size_m wave` - the wave-data chunk.
+			// @DOCLINE * `uint32_m wave_len` - the recorded length of the wave-data chunk.
+			// @DOCLINE * `size_m fact` - the fact-ck chunk.
+			// @DOCLINE * `uint32_m fact_len` - the recorded length of the fact-ck chunk.
+			// @DOCLINE * `size_m cue` - the cue-ck chunk.
+			// @DOCLINE * `uint32_m cue_len` - the recorded length of the cue-ck chunk.
+			// @DOCLINE * `size_m playlist` - the playlist-ck chunk.
+			// @DOCLINE * `uint32_m playlist_len` - the recorded length of the playlist-ck chunk.
+			// @DOCLINE * `size_m assoc_data` - the assoc-data-list chunk.
+			// @DOCLINE * `uint32_m assoc_data_len` - the recorded length of the assoc-data-list chunk.
+
+			// @DOCLINE If one of the index values defined above is set to 0, that indicates that the chunk doesn't appear within the WAVE file. If it is not set to 0, the chunk does appear within the WAVE file, and the index value indicates where in the file, starting at 0 for the first byte within the file and on.
+
+			// @DOCLINE The index values do *not* reference the index of the chunk (which would start at its ckID), but instead reference where the actual data for the chunk starts (which starts at ckData); the index values are an index to the chunk's ckData, not the chunk's ckID. This includes chunks that are wrapped in a LIST; chunks wrapped in a list (such as the assoc-data-list chunk) have their indexes and lengths referencing the LIST chunk itself.
+
+			// @DOCLINE A specification-compliant WAVE file will always have the chunks fmt-ck and wave-data. Although the specification does state that fmt-ck has to be defined before wave-data, muaf ignores this, and can successfully load files that don't follow this. The ignoring of this rule only applies when muaf is *reading* from a WAVE file; muaf follows this (and all other rules laid out in the specification) when *writing* a WAVE file.
+
+			// @DOCLINE Additionally, WAVE's specifications list chunks in a specific order (fmt-ck, fact-ck, cue-ck, playlist-ck, assoc-data-list, wave-data), but I am unaware if they necessarily *need* to be in this order (besides the previously mentioned rule that fmt-ck occurs before wave-data), so muaf permits WAVE files to have any chunks in any order, as long as fmt-ck and wave-data appear at some point. muaf writes WAVE files in the specified order, though.
+
+		// @DOCLINE ## WAVE wrapper
+
+			// @DOCLINE The function `mu_create_WAVE_wrapper` creates a WAVE file based on the given WAVE wrapper information, defined below: @NLNT
+			MUDEF muafResult mu_create_WAVE_wrapper(const char* filename, muWAVEWrapper* wrapper);
+
+			// @DOCLINE The function `mu_free_WAVE_wrapper` frees any manually allocated data that might have been generated from its call to `mu_create_WAVE_wrapper`, defined below: @NLNT
+			MUDEF void mu_free_WAVE_wrapper(muWAVEWrapper* wrapper);
+
+			// @DOCLINE Upon a successful/non-fatal call to `mu_create_WAVE_wrapper`, the WAVE file is properly encoded, although with all of the audio data initialized to 0.
+
+			// @DOCLINE The struct `muWAVEWrapper` represents a WAVE file wrapper, and has the following members:
+			struct muWAVEWrapper {
+				// @DOCLINE * `@NLFT audio_format` - the [audio format](#audio-formats) of the WAVE file.
+				muafAudioFormat audio_format;
+				// @DOCLINE * `@NLFT num_frames` - the amount of frames in the WAVE file.
+				uint32_m num_frames;
+				// @DOCLINE * `@NLFT num_channels` - the number of channels.
+				uint16_m num_channels;
+				// @DOCLINE * `@NLFT sample_rate` - the amount of samples that should be played every second per channel.
+				uint32_m sample_rate;
+				// @DOCLINE * `@NLFT chunks` - the location of the chunks in the audio file. This is used internally, and should not be filled in by the user.
+				muWAVEChunks chunks;
+			};
+
+			// @DOCLINE ### Get WAVE wrapper from WAVE file
+
+				// @DOCLINE The function `mu_get_WAVE_wrapper_from_WAVE` fills in information for a WAVE wrapper based on the contents of another WAVE file, defined below: @NLNT
+				MUDEF muafResult mu_get_WAVE_wrapper_from_WAVE(muWAVEProfile* profile, muWAVEWrapper* wrapper);
+
+				// @DOCLINE The given profile must already be loaded, and have a [supported audio format](#audio-formats).
 
 		// @DOCLINE ## WAVE known bugs and limitations
 
@@ -1285,24 +1159,17 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 				// @DOCLINE muaf does not currently support wave-data that's provided in the form of a LIST. It only supports wave-data in the form of a data-ck chunk.
 
-			// @DOCLINE ### Support for wBitsPerSample
-
-				// @DOCLINE muaf does not currently support values for wBitsPerSample that are not divisible by 8.
-
 	// @DOCLINE # FLAC API
-
-		// @DOCLINE This section describes muaf's API for the [Free Lossless Audio Codec](https://en.wikipedia.org/wiki/FLAC), or FLAC. The code for this API is built based off of [the RFC 9639 specification](https://datatracker.ietf.org/doc/rfc9639/), and this section of muaf's documentation will reference concepts that are defined in this specification. Any quotes referenced in this section are from RFC 9639 unless it is stated otherwise.
-
-		// @DOCLINE All values provided by the FLAC API by retrieving information from a FLAC audio file are checked and strictly guaranteed to be values permitted by the specification unless it is stated otherwise. These limitations are also strictly followed when encoding with no exceptions.
 
 		// @DOCLINE ## FLAC profile
 
 			typedef struct muFLACProfile muFLACProfile;
+			typedef struct muFLACMetadataBlock muFLACMetadataBlock;
 
 			// @DOCLINE A FLAC file's profile can be retrieved with the function `mu_get_FLAC_profile`, defined below: @NLNT
 			MUDEF muafResult mu_get_FLAC_profile(const char* filename, muFLACProfile* profile);
 
-			// @DOCLINE Once retrieved, the profile must be deallocated at some point using the function `mu_free_FLAC_profile`, defined below: @NLNT
+			// @DOCLINE Once retrieved, the profile must be deallocated at some point using the functino `mu_free_FLAC_profile`, defined below: @NLNT
 			MUDEF void mu_free_FLAC_profile(muFLACProfile* profile);
 
 			// @DOCLINE The struct `muFLACProfile` represents the audio file profile of a FLAC file, and has the following members:
@@ -1329,7 +1196,42 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				uint64_m low_checksum;
 				// @DOCLINE * `@NLFT high_checksum` - the high bytes of the ninth value in the streaminfo metadata block; high bytes of "MD5 checksum of the unencoded audio data."
 				uint64_m high_checksum;
+				// @DOCLINE * `@NLFT num_metadata_blocks` - the number of metadata blocks in the FLAC file (excluding streaminfo).
+				size_m num_metadata_blocks;
+				// @DOCLINE * `@NLFT* metadata_blocks` - the [metadata blocks](#flac-metadata-blocks) in the FLAC file (excluding streaminfo).
+				muFLACMetadataBlock* metadata_blocks;
 			};
+
+		// @DOCLINE ## FLAC metadata blocks
+
+			// @DOCLINE The struct `muFLACMetadataBlock` represents a metadata block in a FLAC file. It has the following members:
+			struct muFLACMetadataBlock {
+				// @DOCLINE * `@NLFT block_type` - the [metadata block type](#flac-metadata-block-types).
+				uint8_m block_type;
+				// @DOCLINE * `@NLFT length` - the recorded length of the metadata block.
+				uint32_m length;
+				// @DOCLINE * `@NLFT index` - the index location of the metadata block data, starting at 0 for the first byte in the file.
+				size_m index;
+			};
+
+			// @DOCLINE ### FLAC metadata block types
+
+				// @DOCLINE The following recognized metadata block type values for FLAC in muaf are defined:
+
+				// @DOCLINE * `MU_FLAC_METADATA_PADDING` - "Padding" (real value 1).
+				#define MU_FLAC_METADATA_PADDING 1
+				// @DOCLINE * `MU_FLAC_METADATA_APPLICATION` - "Application" (real value 2).
+				#define MU_FLAC_METADATA_APPLICATION 2
+				// @DOCLINE * `MU_FLAC_METADATA_SEEK_TABLE` - "Seek table" (real value 3).
+				#define MU_FLAC_METADATA_SEEK_TABLE 3
+				// @DOCLINE * `MU_FLAC_METADATA_VORBIS_COMMENT` - "Vorbis comment" (real value 4).
+				#define MU_FLAC_METADATA_VORBIS_COMMENT 4
+				// @DOCLINE * `MU_FLAC_METADATA_CUESHEET` - "Cuesheet" (real value 5).
+				#define MU_FLAC_METADATA_CUESHEET 5
+				// @DOCLINE * `MU_FLAC_METADATA_PICTURE` - "Picture" (real value 6).
+				#define MU_FLAC_METADATA_PICTURE 6
+
+				// @DOCLINE Metadata blocks that don't have any of these block types are still loaded by muaf (besides any forbidden values), and muaf does not provide a built-in way to read the values from all of these block types; these defined values are provided purely for convenience, and are copied directly from the specification.
 
 	// @DOCLINE # Result
 
@@ -1344,18 +1246,18 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 				// @DOCLINE * `MUAF_SUCCESS` - the task was successfully completed; real value 0.
 				#define MUAF_SUCCESS 0
-				// @DOCLINE * `MUAF_FAILED_MALLOC` - a vital call to malloc failed.
+				// @DOCLINE * `MUAF_FAILED_MALLOC` - a vital call to `malloc` failed.
 				#define MUAF_FAILED_MALLOC 1
 				// @DOCLINE * `MUAF_FAILED_OPEN_FILE` - an attempt to open the file failed.
 				#define MUAF_FAILED_OPEN_FILE 2
-				// @DOCLINE * `MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT` - the task could not be completed due to the file being in an audio format that muaf does not support.
-				#define MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT 3
-				// @DOCLINE * `MUAF_FAILED_CREATE_FILE` - an attempt to create the file failed.
-				#define MUAF_FAILED_CREATE_FILE 4
-				// @DOCLINE * `MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT` - the task could not be completed due to the file being in an audio file format (or the user providing an audio file format value) that muaf does not support or could not recognize.
-				#define MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT 5
 				// @DOCLINE * `MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION` - an attempt to retrieve/write information from/to an audio file failed, as the assumed file format was not the case (such as trying to get the profile of a WAVE file using `mu_get_WAVE_profile` when the file in question doesn't appear to actually be a WAVE file).
-				#define MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION 6
+				#define MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION 3
+				// @DOCLINE * `MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT` - the file is in an audio format that muaf does not support for the given task.
+				#define MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT 4
+				// @DOCLINE * `MUAF_FAILED_CREATE_FILE` - an attempt to create the file failed.
+				#define MUAF_FAILED_CREATE_FILE 5
+				// @DOCLINE * `MUAF_FAILED_REALLOC` - a vital call to `realloc` failed.
+				#define MUAF_FAILED_REALLOC 6
 
 			// @DOCLINE ### WAVE result values
 			// 1024 -> 2047 //
@@ -1368,12 +1270,12 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				#define MUAF_INVALID_WAVE_MISSING_WAVE_DATA 1026
 				// @DOCLINE * `MUAF_INVALID_WAVE_FMT_LENGTH` - the WAVE chunk fmt-ck has an invalid recorded length.
 				#define MUAF_INVALID_WAVE_FMT_LENGTH 1027
-				// @DOCLINE * `MUAF_INVALID_WAVE_FMT_CHANNELS` - the WAVE chunk fmt-ck's value 'wChannels' has an invalid value of 0.
-				#define MUAF_INVALID_WAVE_FMT_CHANNELS 1028
-				// @DOCLINE * `MUAF_INVALID_WAVE_FMT_SAMPLES_PER_SEC` - the WAVE chunk fmt-ck's value 'dwSamplesPerSec' has an invalid value of 0.
-				#define MUAF_INVALID_WAVE_FMT_SAMPLES_PER_SEC 1029
 				// @DOCLINE * `MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE` - the WAVE chunk fmt-ck's PCM-format-specific value 'wBitsPerSample' has an invalid value; it's rather equal to 0, non-divisible by 8 without a remainder, doesn't evenly divide the length of the wave data, or doesn't align with the value for wBlockAlign.
-				#define MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE 1030
+				#define MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE 1028
+				// @DOCLINE * `MUAF_INVALID_WAVE_FMT_CHANNELS` - the WAVE chunk fmt-ck's value 'wChannels' has an invalid value of 0.
+				#define MUAF_INVALID_WAVE_FMT_CHANNELS 1029
+				// @DOCLINE * `MUAF_INVALID_WAVE_FMT_SAMPLES_PER_SEC` - the WAVE chunk fmt-ck's value 'dwSamplesPerSec' has an invalid value of 0.
+				#define MUAF_INVALID_WAVE_FMT_SAMPLES_PER_SEC 1030
 				// @DOCLINE * `MUAF_INVALID_WAVE_FILE_WRITE_SIZE` - the WAVE file could not be created, as the size of the WAVE file would be over the maximum file size of a WAVE file due to any of the limitations of how big certain values can be encoded in WAVE (such as the ckSize for the RIFF chunk).
 				#define MUAF_INVALID_WAVE_FILE_WRITE_SIZE 1031
 
@@ -1391,12 +1293,20 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 				// @DOCLINE * `MUAF_INVALID_FLAC_STREAMINFO_FRAME_SIZE_MIN_MAX` - the listed minimum and maximum frame size within streaminfo do not make sense, as the maximum is smaller than the minimum.
 				#define MUAF_INVALID_FLAC_STREAMINFO_FRAME_SIZE_MIN_MAX 2052
-				// @DOCLINE * `MUAF_INVALID_FLAC_STREAMINFO_NUM_CHANNELS` - the listed number of channels within streaminfo (after accounting for subtraction) is not within the permitted range of 1 to 8. This value is permitted to be zero (after accounting for subtraction) if no audio is being stored.
-				#define MUAF_INVALID_FLAC_STREAMINFO_NUM_CHANNELS 2053
-				// @DOCLINE * `MUAF_INVALID_FLAC_STREAMINFO_BITS_PER_SAMPLE` - the listed bits per sample within streaminfo (after accounting for subtraction) is not within the permitted range of 4 to 32. This value is permitted to be zero (after accounting for subtraction) if no audio is being stored.
-				#define MUAF_INVALID_FLAC_STREAMINFO_BITS_PER_SAMPLE 2054
+				// @DOCLINE * `MUAF_INVALID_FLAC_STREAMINFO_BITS_PER_SAMPLE` - the listed bits per sample within streaminfo (after accounting for subtraction) is not within the permitted range of 4 to 32.
+				#define MUAF_INVALID_FLAC_STREAMINFO_BITS_PER_SAMPLE 2053
 				// @DOCLINE * `MUAF_INVALID_FLAC_STREAMINFO_SAMPLE_COUNT` - the listed amount of samples doesn't make sense, rather because the FLAC file doesn't contain audio and the sample count is over 0, or because the FLAC file does contain audio and the sample count is 0.
-				#define MUAF_INVALID_FLAC_STREAMINFO_SAMPLE_COUNT 2055
+				#define MUAF_INVALID_FLAC_STREAMINFO_SAMPLE_COUNT 2054
+				// @DOCLINE * `MUAF_INVALID_FLAC_METADATA_BLOCK_LENGTH` - rather the recorded length of a metadata block goes past the end of the file, or a metadata block's header was indicated despite there not being enough space left in the file to store another metadata block header.
+				#define MUAF_INVALID_FLAC_METADATA_BLOCK_LENGTH 2055
+				// @DOCLINE * `MUAF_INVALID_FLAC_METADATA_BLOCK_TYPE` - the type of a metadata block type within the FLAC file was the forbidden value 127.
+				#define MUAF_INVALID_FLAC_METADATA_BLOCK_TYPE 2056
+				// @DOCLINE * `MUAF_INVALID_FLAC_DUPLICATE_STREAMINFO` - more than one streaminfo metadata block was identified.
+				#define MUAF_INVALID_FLAC_DUPLICATE_STREAMINFO 2057
+				// @DOCLINE * `MUAF_INVALID_FLAC_DUPLICATE_SEEK_TABLE` - more than one seek table metadata block was identified.
+				#define MUAF_INVALID_FLAC_DUPLICATE_SEEK_TABLE 2058
+				// @DOCLINE * `MUAF_INVALID_FLAC_DUPLICATE_VORBIS_COMMENT` - more than one vorbis comment metadata block was identified.
+				#define MUAF_INVALID_FLAC_DUPLICATE_VORBIS_COMMENT 2059
 
 		// @DOCLINE ## Check if result is fatal
 
@@ -1489,7 +1399,8 @@ Overall, muaf is okay with files not strictly complying with the specification w
 		#endif
 
 		#if !defined(mu_malloc) || \
-			!defined(mu_free)
+			!defined(mu_free) || \
+			!defined(mu_realloc)
 
 			// @DOCLINE ## `stdlib.h` dependencies
 			#include <stdlib.h>
@@ -1502,6 +1413,11 @@ Overall, muaf is okay with files not strictly complying with the specification w
 			// @DOCLINE * `mu_free` - equivalent to `free`.
 			#ifndef mu_free
 				#define mu_free free
+			#endif
+
+			// @DOCLINE * `mu_realloc` - equivalent to `realloc`.
+			#ifndef mu_realloc
+				#define mu_realloc realloc
 			#endif
 
 		#endif
@@ -1609,9 +1525,9 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 	/* WAVE */
 
-		/* Profiling */
+		/* Enum/Misc. functions */
 
-			// Checks if given data is WAVE or not
+			// Returns whether or not given file is WAVE
 			muBool muafWAVE_IsWAVE(muafInner_File* file) {
 				// Minimum length check
 				// Includes RIFF, ckSize, and WAVE
@@ -1624,18 +1540,35 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				muafInner_LoadFromFile(file, 0, 12, data);
 
 				// Check for RIFF
-				if (data[0] != 0x52 || data[1] != 0x49 || data[2] != 0x46 || data[3] != 0x46) {
+				if (MU_RBEU32(data) != 0x52494646) {
 					return MU_FALSE;
 				}
-
 				// Skip size and check for WAVE
-				if (data[8] != 0x57 || data[9] != 0x41 || data[10] != 0x56 || data[11] != 0x45) {
+				if (MU_RBEU32(data+8) != 0x57415645) {
 					return MU_FALSE;
 				}
 
 				// Has RIFF and WAVE, so likely WAVE.
 				return MU_TRUE;
 			}
+
+			// Returns WAVE support for given audio formats
+			muBool muafWAVE_FormatSupport(muafAudioFormat format) {
+				// Perform based on audio format
+				switch (format) {
+					// Unknown
+					default: return MU_FALSE; break;
+
+					// Supported PCM
+					case MUAF_FORMAT_PCM_U8:  case MUAF_FORMAT_PCM_S16:
+					case MUAF_FORMAT_PCM_S24: case MUAF_FORMAT_PCM_S32:
+					case MUAF_FORMAT_PCM_S64:
+						return MU_TRUE;
+					break;
+				}
+			}
+
+		/* Profiling */
 
 			// Gets chunk information about WAVE file
 			// Does check for required chunks
@@ -1829,33 +1762,6 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				}
 			}
 
-			// Gets WAVE profile given inner file
-			muafResult muafWAVE_GetWAVEProfile(muafInner_File* file, muWAVEProfile* profile) {
-				// Make sure it's WAVE
-				if (!muafWAVE_IsWAVE(file)) {
-					return MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION;
-				}
-				// Correct file length based on ckSize
-				muafWAVE_HandleCkSize(file);
-
-				// Zero-out profile memory
-				mu_memset(profile, 0, sizeof(muWAVEProfile));
-
-				// Get chunk information
-				muafResult res = muafWAVE_GetChunks(file, profile);
-				if (muaf_result_is_fatal(res)) {
-					return res;
-				}
-				// Get fmt information
-				res = muafWAVE_GetFmtInfo(file, profile);
-				if (muaf_result_is_fatal(res)) {
-					mu_free_WAVE_profile(profile);
-					return res;
-				}
-
-				return res;
-			}
-
 			// Gets WAVE profile
 			MUDEF muafResult mu_get_WAVE_profile(const char* filename, muWAVEProfile* profile) {
 				// Open file
@@ -1864,8 +1770,30 @@ Overall, muaf is okay with files not strictly complying with the specification w
 					return MUAF_FAILED_OPEN_FILE;
 				}
 				
-				// Get WAVE profile
-				muafResult res = muafWAVE_GetWAVEProfile(&file, profile);
+				// Make sure it's WAVE
+				if (!muafWAVE_IsWAVE(&file)) {
+					muafInner_DeloadFile(&file);
+					return MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION;
+				}
+				// Correct file length based on ckSize
+				muafWAVE_HandleCkSize(&file);
+
+				// Zero-out profile memory
+				mu_memset(profile, 0, sizeof(muWAVEProfile));
+
+				// Get chunk information
+				muafResult res = muafWAVE_GetChunks(&file, profile);
+				if (muaf_result_is_fatal(res)) {
+					muafInner_DeloadFile(&file);
+					return res;
+				}
+				// Get fmt information
+				res = muafWAVE_GetFmtInfo(&file, profile);
+				if (muaf_result_is_fatal(res)) {
+					muafInner_DeloadFile(&file);
+					mu_free_WAVE_profile(profile);
+					return res;
+				}
 
 				// Close file
 				muafInner_DeloadFile(&file);
@@ -1886,60 +1814,123 @@ Overall, muaf is okay with files not strictly complying with the specification w
 			/* PCM reading */
 
 				// MUAF_FORMAT_PCM_U8
-				void muafWAVE_read_FORMAT_PCM_U8(muafInner_File* file, muWAVEProfile* profile, muafFrames beg_frame, muafFrames frame_len, uint8_m* data) {
+				muafResult muafWAVE_ReadPCMU8(muafInner_File* file, muWAVEProfile* profile, uint32_m beg_frame, uint32_m frame_len, uint8_m* data) {
 					// Read data from file
 					muafInner_LoadFromFile(file, profile->chunks.wave + (beg_frame * profile->channels), frame_len * profile->channels, data);
+					return MUAF_SUCCESS;
 				}
 
 				// MUAF_FORMAT_PCM_S16
-				void muafWAVE_read_FORMAT_PCM_S16(muafInner_File* file, muWAVEProfile* profile, muafFrames beg_frame, muafFrames frame_len, int16_m* data) {
+				muafResult muafWAVE_ReadPCMS16(muafInner_File* file, muWAVEProfile* profile, uint32_m beg_frame, uint32_m frame_len, int16_m* data) {
 					// Read data from file
 					muafInner_LoadFromFile(file, profile->chunks.wave + (beg_frame * 2 * profile->channels), frame_len * 2 * profile->channels, (muByte*)data);
 					// Correct byte orders
-					muafFrames sample_count = frame_len * profile->channels;
-					for (muafFrames s = 0; s < sample_count; ++s) {
+					uint32_m sample_count = frame_len * profile->channels;
+					for (uint32_m s = 0; s < sample_count; ++s) {
 						int16_m sample = MU_RLES16(((muByte*)data)+(s*2));
 						data[s] = sample;
 					}
+					return MUAF_SUCCESS;
+				}
+
+				// MUAF_FORMAT_PCM_S24
+				muafResult muafWAVE_ReadPCMS24(muafInner_File* file, muWAVEProfile* profile, uint32_m beg_frame, uint32_m frame_len, int32_m* data) {
+					// Allocate and read data from file
+					muByte* b_data = (muByte*)mu_malloc(frame_len * 3);
+					if (!b_data) {
+						return MUAF_FAILED_MALLOC;
+					}
+					muafInner_LoadFromFile(file, profile->chunks.wave + (beg_frame * 3 * profile->channels), frame_len * 3 * profile->channels, b_data);
+
+					// Copy over data
+					uint32_m sample_count = frame_len * profile->channels;
+					for (uint32_m s = 0; s < sample_count; ++s) {
+						data[s] = MU_RLES24(b_data+(s*3));
+					}
+
+					// Free data and return
+					mu_free(b_data);
+					return MUAF_SUCCESS;
 				}
 
 				// MUAF_FORMAT_PCM_S32
-				void muafWAVE_read_FORMAT_PCM_S32(muafInner_File* file, muWAVEProfile* profile, muafFrames beg_frame, muafFrames frame_len, int32_m* data) {
+				muafResult muafWAVE_ReadPCMS32(muafInner_File* file, muWAVEProfile* profile, uint32_m beg_frame, uint32_m frame_len, int32_m* data) {
 					// Read data from file
 					muafInner_LoadFromFile(file, profile->chunks.wave + (beg_frame * 4 * profile->channels), frame_len * 4 * profile->channels, (muByte*)data);
 					// Correct byte orders
-					muafFrames sample_count = frame_len * profile->channels;
-					for (muafFrames s = 0; s < sample_count; ++s) {
-						int16_m sample = MU_RLES16(((muByte*)data)+(s*4));
+					uint32_m sample_count = frame_len * profile->channels;
+					for (uint32_m s = 0; s < sample_count; ++s) {
+						int16_m sample = MU_RLES32(((muByte*)data)+(s*4));
 						data[s] = sample;
 					}
+					return MUAF_SUCCESS;
 				}
 
 				// MUAF_FORMAT_PCM_S64
-				void muafWAVE_read_FORMAT_PCM_S64(muafInner_File* file, muWAVEProfile* profile, muafFrames beg_frame, muafFrames frame_len, int64_m* data) {
+				muafResult muafWAVE_ReadPCMS64(muafInner_File* file, muWAVEProfile* profile, uint32_m beg_frame, uint32_m frame_len, int64_m* data) {
 					// Read data from file
 					muafInner_LoadFromFile(file, profile->chunks.wave + (beg_frame * 8 * profile->channels), frame_len * 8 * profile->channels, (muByte*)data);
 					// Correct byte orders
-					muafFrames sample_count = frame_len * profile->channels;
-					for (muafFrames s = 0; s < sample_count; ++s) {
-						int16_m sample = MU_RLES16(((muByte*)data)+(s*8));
+					uint32_m sample_count = frame_len * profile->channels;
+					for (uint32_m s = 0; s < sample_count; ++s) {
+						int16_m sample = MU_RLES64(((muByte*)data)+(s*8));
 						data[s] = sample;
 					}
+					return MUAF_SUCCESS;
+				}
+
+				// Reads PCM data from WAVE file given inner file
+				muafResult muafWAVE_ReadPCM(muafInner_File* file, muWAVEProfile* profile, muafAudioFormat format, uint32_m beg_frame, uint32_m frame_len, muByte* data) {
+					// Perform based on format
+					switch (format) {
+						// Unknown
+						default: return MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT; break;
+						// PCM
+						case MUAF_FORMAT_PCM_U8:  return muafWAVE_ReadPCMU8 (file, profile, beg_frame, frame_len, (uint8_m*)data); break;
+						case MUAF_FORMAT_PCM_S16: return muafWAVE_ReadPCMS16(file, profile, beg_frame, frame_len, (int16_m*)data); break;
+						case MUAF_FORMAT_PCM_S24: return muafWAVE_ReadPCMS24(file, profile, beg_frame, frame_len, (int32_m*)data); break;
+						case MUAF_FORMAT_PCM_S32: return muafWAVE_ReadPCMS32(file, profile, beg_frame, frame_len, (int32_m*)data); break;
+						case MUAF_FORMAT_PCM_S64: return muafWAVE_ReadPCMS64(file, profile, beg_frame, frame_len, (int64_m*)data); break;
+					}
+				}
+
+				// Reads PCM data from a WAVE file
+				MUDEF muafResult mu_read_WAVE_PCM(const char* filename, muWAVEProfile* profile, uint32_m beg_frame, uint32_m frame_len, void* data) {
+					// Open file
+					muafInner_File file;
+					if (muafInner_LoadFile(filename, &file) != 0) {
+						return MUAF_FAILED_OPEN_FILE;
+					}
+
+					// Perform reading
+					muafResult res = muafWAVE_ReadPCM(
+						&file, profile,
+						mu_get_WAVE_audio_format(profile),
+						beg_frame, frame_len, (muByte*)data
+					);
+
+					// Close file and return
+					muafInner_DeloadFile(&file);
+					return res;
 				}
 
 			/* General reading */
 
-				// Finds muaf supported equivalent for WAVE data storage
-				MUDEF muafAudioFormat mu_WAVE_unspecific_audio_format(uint16_m format_tag, muWAVEFormatSpecificFields specific_fields) {
-					switch (format_tag) {
+				// Gets audio format of WAVE file
+				MUDEF muafAudioFormat mu_get_WAVE_audio_format(muWAVEProfile* profile) {
+					// Perform based on format tag
+					switch (profile->format_tag) {
+						// Unknown
 						default: return MUAF_FORMAT_UNKNOWN; break;
 
-						// WAVE PCM
+						// PCM
 						case MU_WAVE_FORMAT_PCM: {
-							switch (specific_fields.wave_pcm->bits_per_sample) {
+							// Perform based on bits per sample
+							switch (profile->specific_fields.wave_pcm->bits_per_sample) {
 								default: return MUAF_FORMAT_UNKNOWN; break;
-								case 8: return MUAF_FORMAT_PCM_U8; break;
+								case 8:  return MUAF_FORMAT_PCM_U8;  break;
 								case 16: return MUAF_FORMAT_PCM_S16; break;
+								case 24: return MUAF_FORMAT_PCM_S24; break;
 								case 32: return MUAF_FORMAT_PCM_S32; break;
 								case 64: return MUAF_FORMAT_PCM_S64; break;
 							}
@@ -1947,490 +1938,432 @@ Overall, muaf is okay with files not strictly complying with the specification w
 					}
 				}
 
-				// Reads uncompressed raw data given inner file and format
-				muafResult muafWAVE_ReadUncompressed(muafInner_File* file, muWAVEProfile* profile, muafAudioFormat format, muafFrames beg_frame, muafFrames frame_len, void* data) {
-					// Perform reading based on format
-					switch (format) {
-						// Unknown
-						default: return MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT; break;
-						// WAVE PCM
-						case MUAF_FORMAT_PCM_U8:  muafWAVE_read_FORMAT_PCM_U8 (file, profile, beg_frame, frame_len, (uint8_m*)data); break;
-						case MUAF_FORMAT_PCM_S16: muafWAVE_read_FORMAT_PCM_S16(file, profile, beg_frame, frame_len, (int16_m*)data); break;
-						case MUAF_FORMAT_PCM_S32: muafWAVE_read_FORMAT_PCM_S32(file, profile, beg_frame, frame_len, (int32_m*)data); break;
-						case MUAF_FORMAT_PCM_S64: muafWAVE_read_FORMAT_PCM_S64(file, profile, beg_frame, frame_len, (int64_m*)data); break;
-					}
-
-					return MUAF_SUCCESS;
-				}
-
-				// Reads uncompressed raw data
-				MUDEF muafResult mu_read_WAVE_uncompressed(const char* filename, muWAVEProfile* profile, muafFrames beg_frame, muafFrames frame_len, void* data) {
-					// Open file
-					muafInner_File file;
-					if (muafInner_LoadFile(filename, &file) != 0) {
-						return MUAF_FAILED_OPEN_FILE;
-					}
-
-					// Get muaf supported audio format
-					muafAudioFormat format = mu_WAVE_unspecific_audio_format(profile->format_tag, profile->specific_fields);
-					// Perform reading
-					muafResult res = muafWAVE_ReadUncompressed(&file, profile, format, beg_frame, frame_len, data);
-
-					// Close file
-					muafInner_DeloadFile(&file);
-					return res;
-				}
-
 		/* Writing */
 
-			/* PCM wrapper writing */
+			/* Wrapper */
 
-				// MUAF_FORMAT_PCM_U8
-				muafResult muafWAVE_fmt_FORMAT_PCM_U8(muafInner_File* file, muWAVEWrapper* wrapper) {
-					// Fill out info
-					muByte fmt[16];
+				/* PCM fmt writing */
 
-					// - wFormatTag
-					MU_WLEU16(fmt, MU_WAVE_FORMAT_PCM);
-					// - wChannels
-					MU_WLEU16(fmt+2, wrapper->num_channels);
-					// - dwSamplesPerSec
-					MU_WLEU32(fmt+4, wrapper->sample_rate);
-					// - dwAvgBytesPerSec
-					uint64_m avg_bytes = ((uint64_m)wrapper->num_channels) * ((uint64_m)wrapper->sample_rate) * 1;
-					if (avg_bytes > 0xFFFFFFFF) {
-						return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+					// MUAF_FORMAT_PCM_U8
+					muafResult muafWAVE_FmtPCMU8(muafInner_File* file, muWAVEWrapper* wrapper) {
+						// Fill out info
+						muByte fmt[16];
+
+						// - wFormatTag
+						MU_WLEU16(fmt, MU_WAVE_FORMAT_PCM);
+						// - wChannels
+						MU_WLEU16(fmt+2, wrapper->num_channels);
+						// - dwSamplesPerSec
+						MU_WLEU32(fmt+4, wrapper->sample_rate);
+						// - dwAvgBytesPerSec
+						uint64_m avg_bytes = ((uint64_m)wrapper->num_channels) * ((uint64_m)wrapper->sample_rate) * 1;
+						if (avg_bytes > 0xFFFFFFFF) {
+							return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+						}
+						MU_WLEU32(fmt+8, avg_bytes);
+						// - wBlockAlign
+						MU_WLEU16(fmt+12, wrapper->num_channels);
+
+						// - wBitsPerSample
+						MU_WLEU16(fmt+14, 8);
+
+						// Write to file
+						muafInner_WriteToFile(file, wrapper->chunks.fmt, 16, fmt);
+						return MUAF_SUCCESS;
 					}
-					MU_WLEU32(fmt+8, avg_bytes);
-					// - wBlockAlign
-					MU_WLEU16(fmt+12, wrapper->num_channels);
 
-					// - wBitsPerSample
-					MU_WLEU16(fmt+14, 8);
+					// MUAF_FORMAT_PCM_S16
+					muafResult muafWAVE_FmtPCMS16(muafInner_File* file, muWAVEWrapper* wrapper) {
+						// Fill out info
+						muByte fmt[16];
 
-					// Write to file
-					muafInner_WriteToFile(file, wrapper->chunks.fmt, 16, fmt);
-					return MUAF_SUCCESS;
-				}
+						// - wFormatTag
+						MU_WLEU16(fmt, MU_WAVE_FORMAT_PCM);
+						// - wChannels
+						MU_WLEU16(fmt+2, wrapper->num_channels);
+						// - dwSamplesPerSec
+						MU_WLEU32(fmt+4, wrapper->sample_rate);
+						// - dwAvgBytesPerSec
+						uint64_m avg_bytes = ((uint64_m)wrapper->num_channels) * ((uint64_m)wrapper->sample_rate) * 2;
+						if (avg_bytes > 0xFFFFFFFF) {
+							return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+						}
+						MU_WLEU32(fmt+8, avg_bytes);
+						// - wBlockAlign
+						uint32_m block_align = ((uint32_m)wrapper->num_channels) * 2;
+						if (block_align > 0xFFFFFFFF) {
+							return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+						}
+						MU_WLEU16(fmt+12, block_align);
 
-				// MUAF_FORMAT_PCM_S16
-				muafResult muafWAVE_fmt_FORMAT_PCM_S16(muafInner_File* file, muWAVEWrapper* wrapper) {
-					// Fill out info
-					muByte fmt[16];
+						// - wBitsPerSample
+						MU_WLEU16(fmt+14, 16);
 
-					// - wFormatTag
-					MU_WLEU16(fmt, MU_WAVE_FORMAT_PCM);
-					// - wChannels
-					MU_WLEU16(fmt+2, wrapper->num_channels);
-					// - dwSamplesPerSec
-					MU_WLEU32(fmt+4, wrapper->sample_rate);
-					// - dwAvgBytesPerSec
-					uint64_m avg_bytes = ((uint64_m)wrapper->num_channels) * ((uint64_m)wrapper->sample_rate) * 2;
-					if (avg_bytes > 0xFFFFFFFF) {
-						return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+						// Write to file
+						muafInner_WriteToFile(file, wrapper->chunks.fmt, 16, fmt);
+						return MUAF_SUCCESS;
 					}
-					MU_WLEU32(fmt+8, avg_bytes);
-					// - wBlockAlign
-					uint32_m block_align = ((uint32_m)wrapper->num_channels) * 2;
-					if (block_align > 0xFFFFFFFF) {
-						return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+
+					// MUAF_FORMAT_PCM_S24
+					muafResult muafWAVE_FmtPCMS24(muafInner_File* file, muWAVEWrapper* wrapper) {
+						// Fill out info
+						muByte fmt[16];
+
+						// - wFormatTag
+						MU_WLEU16(fmt, MU_WAVE_FORMAT_PCM);
+						// - wChannels
+						MU_WLEU16(fmt+2, wrapper->num_channels);
+						// - dwSamplesPerSec
+						MU_WLEU32(fmt+4, wrapper->sample_rate);
+						// - dwAvgBytesPerSec
+						uint64_m avg_bytes = ((uint64_m)wrapper->num_channels) * ((uint64_m)wrapper->sample_rate) * 3;
+						if (avg_bytes > 0xFFFFFFFF) {
+							return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+						}
+						MU_WLEU32(fmt+8, avg_bytes);
+						// - wBlockAlign
+						uint32_m block_align = ((uint32_m)wrapper->num_channels) * 3;
+						if (block_align > 0xFFFFFFFF) {
+							return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+						}
+						MU_WLEU16(fmt+12, block_align);
+
+						// - wBitsPerSample
+						MU_WLEU16(fmt+14, 24);
+
+						// Write to file
+						muafInner_WriteToFile(file, wrapper->chunks.fmt, 16, fmt);
+						return MUAF_SUCCESS;
 					}
-					MU_WLEU16(fmt+12, block_align);
 
-					// - wBitsPerSample
-					MU_WLEU16(fmt+14, 16);
+					// MUAF_FORMAT_PCM_S32
+					muafResult muafWAVE_FmtPCMS32(muafInner_File* file, muWAVEWrapper* wrapper) {
+						// Fill out info
+						muByte fmt[16];
 
-					// Write to file
-					muafInner_WriteToFile(file, wrapper->chunks.fmt, 16, fmt);
-					return MUAF_SUCCESS;
-				}
+						// - wFormatTag
+						MU_WLEU16(fmt, MU_WAVE_FORMAT_PCM);
+						// - wChannels
+						MU_WLEU16(fmt+2, wrapper->num_channels);
+						// - dwSamplesPerSec
+						MU_WLEU32(fmt+4, wrapper->sample_rate);
+						// - dwAvgBytesPerSec
+						uint64_m avg_bytes = ((uint64_m)wrapper->num_channels) * ((uint64_m)wrapper->sample_rate) * 4;
+						if (avg_bytes > 0xFFFFFFFF) {
+							return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+						}
+						MU_WLEU32(fmt+8, avg_bytes);
+						// - wBlockAlign
+						uint32_m block_align = ((uint32_m)wrapper->num_channels) * 4;
+						if (block_align > 0xFFFFFFFF) {
+							return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+						}
+						MU_WLEU16(fmt+12, block_align);
 
-				// MUAF_FORMAT_PCM_S32
-				muafResult muafWAVE_fmt_FORMAT_PCM_S32(muafInner_File* file, muWAVEWrapper* wrapper) {
-					// Fill out info
-					muByte fmt[16];
+						// - wBitsPerSample
+						MU_WLEU16(fmt+14, 32);
 
-					// - wFormatTag
-					MU_WLEU16(fmt, MU_WAVE_FORMAT_PCM);
-					// - wChannels
-					MU_WLEU16(fmt+2, wrapper->num_channels);
-					// - dwSamplesPerSec
-					MU_WLEU32(fmt+4, wrapper->sample_rate);
-					// - dwAvgBytesPerSec
-					uint64_m avg_bytes = ((uint64_m)wrapper->num_channels) * ((uint64_m)wrapper->sample_rate) * 4;
-					if (avg_bytes > 0xFFFFFFFF) {
-						return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+						// Write to file
+						muafInner_WriteToFile(file, wrapper->chunks.fmt, 16, fmt);
+						return MUAF_SUCCESS;
 					}
-					MU_WLEU32(fmt+8, avg_bytes);
-					// - wBlockAlign
-					uint32_m block_align = ((uint32_m)wrapper->num_channels) * 4;
-					if (block_align > 0xFFFFFFFF) {
-						return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+
+					// MUAF_FORMAT_PCM_S64
+					muafResult muafWAVE_FmtPCMS64(muafInner_File* file, muWAVEWrapper* wrapper) {
+						// Fill out info
+						muByte fmt[16];
+
+						// - wFormatTag
+						MU_WLEU16(fmt, MU_WAVE_FORMAT_PCM);
+						// - wChannels
+						MU_WLEU16(fmt+2, wrapper->num_channels);
+						// - dwSamplesPerSec
+						MU_WLEU32(fmt+4, wrapper->sample_rate);
+						// - dwAvgBytesPerSec
+						uint64_m avg_bytes = ((uint64_m)wrapper->num_channels) * ((uint64_m)wrapper->sample_rate) * 8;
+						if (avg_bytes > 0xFFFFFFFF) {
+							return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+						}
+						MU_WLEU32(fmt+8, avg_bytes);
+						// - wBlockAlign
+						uint32_m block_align = ((uint32_m)wrapper->num_channels) * 8;
+						if (block_align > 0xFFFFFFFF) {
+							return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+						}
+						MU_WLEU16(fmt+12, block_align);
+
+						// - wBitsPerSample
+						MU_WLEU16(fmt+14, 64);
+
+						// Write to file
+						muafInner_WriteToFile(file, wrapper->chunks.fmt, 16, fmt);
+						return MUAF_SUCCESS;
 					}
-					MU_WLEU16(fmt+12, block_align);
 
-					// - wBitsPerSample
-					MU_WLEU16(fmt+14, 32);
-
-					// Write to file
-					muafInner_WriteToFile(file, wrapper->chunks.fmt, 16, fmt);
-					return MUAF_SUCCESS;
-				}
-
-				// MUAF_FORMAT_PCM_S64
-				muafResult muafWAVE_fmt_FORMAT_PCM_S64(muafInner_File* file, muWAVEWrapper* wrapper) {
-					// Fill out info
-					muByte fmt[16];
-
-					// - wFormatTag
-					MU_WLEU16(fmt, MU_WAVE_FORMAT_PCM);
-					// - wChannels
-					MU_WLEU16(fmt+2, wrapper->num_channels);
-					// - dwSamplesPerSec
-					MU_WLEU32(fmt+4, wrapper->sample_rate);
-					// - dwAvgBytesPerSec
-					uint64_m avg_bytes = ((uint64_m)wrapper->num_channels) * ((uint64_m)wrapper->sample_rate) * 8;
-					if (avg_bytes > 0xFFFFFFFF) {
-						return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+					// Writes fmt given PCM format to write it in
+					muafResult muafWAVE_FmtPCM(muafInner_File* file, muWAVEWrapper* wrapper) {
+						switch (wrapper->audio_format) {
+							default: return MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT; break;
+							case MUAF_FORMAT_PCM_U8 : return muafWAVE_FmtPCMU8 (file, wrapper); break;
+							case MUAF_FORMAT_PCM_S16: return muafWAVE_FmtPCMS16(file, wrapper); break;
+							case MUAF_FORMAT_PCM_S24: return muafWAVE_FmtPCMS24(file, wrapper); break;
+							case MUAF_FORMAT_PCM_S32: return muafWAVE_FmtPCMS32(file, wrapper); break;
+							case MUAF_FORMAT_PCM_S64: return muafWAVE_FmtPCMS64(file, wrapper); break;
+						}
 					}
-					MU_WLEU32(fmt+8, avg_bytes);
-					// - wBlockAlign
-					uint32_m block_align = ((uint32_m)wrapper->num_channels) * 8;
-					if (block_align > 0xFFFFFFFF) {
-						return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+
+				/* General wrapper writing */
+
+					// Fills out the information for the chunks of a WAVE wrapper
+					// Writes the ultimate file length
+					muafResult muafWAVE_FillChunks(muWAVEWrapper* wrapper, size_m* len) {
+						// Initialize all chunk data to 0
+						mu_memset(&wrapper->chunks, 0, sizeof(wrapper->chunks));
+
+						// Write fmt chunk after RIFF (4), ckSize (4), WAVE (4), ckID (4), and ckSize (4)
+						wrapper->chunks.fmt = 20;
+						// Set initial length to common-fields
+						wrapper->chunks.fmt_len = 14;
+
+						// Add to fmt length based on format (and calculate sample size)
+						uint64_m sample_size = muaf_audio_format_sample_size(wrapper->audio_format);
+						// - PCM
+						if (MUAF_FORMAT_IS_PCM(wrapper->audio_format)) {
+							wrapper->chunks.fmt_len += 2;
+						}
+
+						// Write WAVE chunk after fmt chunk, accounting for padding and WAVE's ckID and ckSize
+						wrapper->chunks.wave = wrapper->chunks.fmt + wrapper->chunks.fmt_len + 8;
+						if (wrapper->chunks.wave % 2 != 0) {
+							wrapper->chunks.wave += 1;
+						}
+						// WAVE chunk length
+						wrapper->chunks.wave_len = wrapper->num_frames * sample_size * wrapper->num_channels;
+
+						// Write length
+						*len = ((size_m)wrapper->chunks.wave) + ((size_m)wrapper->chunks.wave_len);
+						if (*len % 2 != 0) {
+							*len += 1;
+						}
+
+						return MUAF_SUCCESS;
 					}
-					MU_WLEU16(fmt+12, block_align);
 
-					// - wBitsPerSample
-					MU_WLEU16(fmt+14, 64);
+					// Writes RIFF and WAVE wrapper for file
+					muafResult muafWAVE_WriteRIFFWrapper(muafInner_File* file) {
+						// RIFF wrapper (+ WAVE)
+						muByte wrapper[12] = {
+							// RIFF
+							0x52, 0x49, 0x46, 0x46,
+							// ckSize (set in a second)
+							0x00, 0x00, 0x00, 0x00,
+							// WAVE
+							0x57, 0x41, 0x56, 0x45
+						};
 
-					// Write to file
-					muafInner_WriteToFile(file, wrapper->chunks.fmt, 16, fmt);
-					return MUAF_SUCCESS;
-				}
+						// Make sure file size is within u32 range, excluding RIFF and ckSize
+						if ((file->len - 8) > 0xFFFFFFFF) {
+							return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
+						}
+						// Write ckSize
+						MU_WLEU32(wrapper+4, file->len - 8);
 
-				// Writes fmt given format to write it in
-				muafResult muafWAVE_fmtWrite(muafInner_File* file, muWAVEWrapper* wrapper) {
-					switch (wrapper->audio_format) {
-						default: return MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT; break;
-						case MUAF_FORMAT_PCM_U8 : return muafWAVE_fmt_FORMAT_PCM_U8 (file, wrapper); break;
-						case MUAF_FORMAT_PCM_S16: return muafWAVE_fmt_FORMAT_PCM_S16(file, wrapper); break;
-						case MUAF_FORMAT_PCM_S32: return muafWAVE_fmt_FORMAT_PCM_S32(file, wrapper); break;
-						case MUAF_FORMAT_PCM_S64: return muafWAVE_fmt_FORMAT_PCM_S64(file, wrapper); break;
+						// Write data to file
+						muafInner_WriteToFile(file, 0, sizeof(wrapper), wrapper);
+
+						return MUAF_SUCCESS;
 					}
-				}
 
-			/* Wrapper writing */
+					// Writes a given chunk header
+					void muafWAVE_WriteChunkHeader(muafInner_File* file, uint32_m index, uint32_m ck_id, uint32_m ck_len) {
+						// Don't do anything if chunk doesn't exist
+						if (index == 0) {
+							return;
+						}
 
-				// Fills out the information for the chunks of a WAVE wrapper
-				// Writes the ultimate file length
-				muafResult muafWAVE_FillChunks(muWAVEWrapper* wrapper, size_m* len) {
-					// Initialize all chunk data to 0
-					mu_memset(&wrapper->chunks, 0, sizeof(wrapper->chunks));
+						// Setup chunk header
+						muByte header[8];
+						MU_WBEU32(header, ck_id);
+						MU_WLEU32(header+4, ck_len);
 
-					// Write fmt chunk after RIFF (4), ckSize (4), WAVE (4), ckID (4), and ckSize (4)
-					wrapper->chunks.fmt = 20;
-					// Set initial length to common-fields
-					wrapper->chunks.fmt_len = 14;
+						// Write chunk header to file
+						muafInner_WriteToFile(file, index-8, sizeof(header), header);
+					}
 
-					// Add to fmt length based on format (and calculate sample size)
-					uint64_m sample_size = 1;
-					switch (wrapper->audio_format) {
-						default: return MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT; break;
+					// Writes empty, initial chunk headers
+					void muafWAVE_InitChunks(muafInner_File* file, muWAVEWrapper* wrapper) {
+						muafWAVE_WriteChunkHeader(file, wrapper->chunks.fmt,        0x666D7420, wrapper->chunks.fmt_len);
+						muafWAVE_WriteChunkHeader(file, wrapper->chunks.wave,       0x64617461, wrapper->chunks.wave_len);
+						muafWAVE_WriteChunkHeader(file, wrapper->chunks.fact,       0x66616374, wrapper->chunks.fact_len);
+						muafWAVE_WriteChunkHeader(file, wrapper->chunks.cue,        0x63756520, wrapper->chunks.cue_len);
+						muafWAVE_WriteChunkHeader(file, wrapper->chunks.playlist,   0x706C7374, wrapper->chunks.playlist_len);
+						muafWAVE_WriteChunkHeader(file, wrapper->chunks.assoc_data, 0x4C495354, wrapper->chunks.assoc_data_len);
+					}
 
+					// Writes fmt based on audio format
+					muafResult muafWAVE_FmtWrite(muafInner_File* file, muWAVEWrapper* wrapper) {
 						// PCM
-						case MUAF_FORMAT_PCM_U8: {
-							wrapper->chunks.fmt_len += 2;
-							sample_size = 1;
-						} break;
-						case MUAF_FORMAT_PCM_S16: {
-							wrapper->chunks.fmt_len += 2;
-							sample_size = 2;
-						} break;
-						case MUAF_FORMAT_PCM_S32: {
-							wrapper->chunks.fmt_len += 2;
-							sample_size = 4;
-						} break;
-						case MUAF_FORMAT_PCM_S64: {
-							wrapper->chunks.fmt_len += 2;
-							sample_size = 8;
-						} break;
+						if (MUAF_FORMAT_IS_PCM(wrapper->audio_format)) {
+							return muafWAVE_FmtPCM(file, wrapper);
+						}
+						else {
+							return MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT;
+						}
 					}
 
-					// Write WAVE chunk after fmt chunk, accounting for padding and WAVE's ckID and ckSize
-					wrapper->chunks.wave = wrapper->chunks.fmt + wrapper->chunks.fmt_len + 8;
-					if (wrapper->chunks.wave % 2 != 0) {
-						wrapper->chunks.wave += 1;
-					}
-					// WAVE chunk length
-					wrapper->chunks.wave_len = wrapper->num_frames * sample_size * wrapper->num_channels;
+					// Creates WAVE file wrapper
+					MUDEF muafResult mu_create_WAVE_wrapper(const char* filename, muWAVEWrapper* wrapper) {
+						// Initialize chunk info
+						size_m len;
+						muafResult res = muafWAVE_FillChunks(wrapper, &len);
+						if (muaf_result_is_fatal(res)) {
+							return res;
+						}
 
-					// Write length
-					*len = ((size_m)wrapper->chunks.wave) + ((size_m)wrapper->chunks.wave_len);
-					if (*len % 2 != 0) {
-						*len += 1;
-					}
+						// Create the file
+						muafInner_File file;
+						if (muafInner_CreateFile(filename, &file, len) != 0) {
+							return MUAF_FAILED_CREATE_FILE;
+						}
 
-					return MUAF_SUCCESS;
-				}
+						// Write RIFF and WAVE wrapper
+						res = muafWAVE_WriteRIFFWrapper(&file);
+						if (muaf_result_is_fatal(res)) {
+							muafInner_DeloadFile(&file);
+							return res;
+						}
 
-				// Writes RIFF and WAVE wrapper for file
-				muafResult muafWAVE_WriteRIFFWrapper(muafInner_File* file) {
-					// RIFF wrapper (+ WAVE)
-					muByte wrapper[12] = {
-						// RIFF
-						0x52, 0x49, 0x46, 0x46,
-						// ckSize (set in a second)
-						0x00, 0x00, 0x00, 0x00,
-						// WAVE
-						0x57, 0x41, 0x56, 0x45
-					};
+						// Write empty chunks
+						muafWAVE_InitChunks(&file, wrapper);
 
-					// Make sure file size is within u32 range, excluding RIFF and ckSize
-					if ((file->len - 8) > 0xFFFFFFFF) {
-						return MUAF_INVALID_WAVE_FILE_WRITE_SIZE;
-					}
-					// Write ckSize
-					MU_WLEU32(wrapper+4, file->len - 8);
+						// Write fmt chunk
+						res = muafWAVE_FmtWrite(&file, wrapper);
+						if (muaf_result_is_fatal(res)) {
+							muafInner_DeloadFile(&file);
+							return res;
+						}
 
-					// Write data to file
-					muafInner_WriteToFile(file, 0, sizeof(wrapper), wrapper);
-
-					return MUAF_SUCCESS;
-				}
-
-				// Writes a given chunk header
-				void muafWAVE_WriteChunkHeader(muafInner_File* file, uint32_m index, uint32_m ck_id, uint32_m ck_len) {
-					// Don't do anything if chunk doesn't exist
-					if (index == 0) {
-						return;
-					}
-
-					// Setup chunk header
-					muByte header[8];
-					MU_WBEU32(header, ck_id);
-					MU_WLEU32(header+4, ck_len);
-
-					// Write chunk header to file
-					muafInner_WriteToFile(file, index-8, sizeof(header), header);
-				}
-
-				// Writes empty, initial chunk headers
-				void muafWAVE_InitChunks(muafInner_File* file, muWAVEWrapper* wrapper) {
-					muafWAVE_WriteChunkHeader(file, wrapper->chunks.fmt,        0x666D7420, wrapper->chunks.fmt_len);
-					muafWAVE_WriteChunkHeader(file, wrapper->chunks.wave,       0x64617461, wrapper->chunks.wave_len);
-					muafWAVE_WriteChunkHeader(file, wrapper->chunks.fact,       0x66616374, wrapper->chunks.fact_len);
-					muafWAVE_WriteChunkHeader(file, wrapper->chunks.cue,        0x63756520, wrapper->chunks.cue_len);
-					muafWAVE_WriteChunkHeader(file, wrapper->chunks.playlist,   0x706C7374, wrapper->chunks.playlist_len);
-					muafWAVE_WriteChunkHeader(file, wrapper->chunks.assoc_data, 0x4C495354, wrapper->chunks.assoc_data_len);
-				}
-
-				// Creates WAVE file wrapper
-				MUDEF muafResult mu_create_WAVE_wrapper(const char* filename, muWAVEWrapper* wrapper) {
-					// Initialize chunk info
-					size_m len;
-					muafResult res = muafWAVE_FillChunks(wrapper, &len);
-					if (muaf_result_is_fatal(res)) {
-						return res;
-					}
-
-					// Create the file
-					muafInner_File file;
-					if (muafInner_CreateFile(filename, &file, len) != 0) {
-						return MUAF_FAILED_CREATE_FILE;
-					}
-
-					// Write RIFF and WAVE wrapper
-					res = muafWAVE_WriteRIFFWrapper(&file);
-					if (muaf_result_is_fatal(res)) {
+						// Close file
 						muafInner_DeloadFile(&file);
 						return res;
 					}
 
-					// Write empty chunks
-					muafWAVE_InitChunks(&file, wrapper);
+					// Destroys WAVE file wrapper
+					MUDEF void mu_free_WAVE_wrapper(muWAVEWrapper* wrapper) {
+						// Does nothing currently (sorry lol :P)
+						return; if (wrapper) {}
+					}
 
-					// Write fmt chunk
-					res = muafWAVE_fmtWrite(&file, wrapper);
-					if (muaf_result_is_fatal(res)) {
+				/* Retrieving WAVE wrapper */
+
+					// Creates WAVE wrapper based on other WAVE file
+					MUDEF muafResult mu_get_WAVE_wrapper_from_WAVE(muWAVEProfile* profile, muWAVEWrapper* wrapper) {
+						// Get audio format
+						wrapper->audio_format = mu_get_WAVE_audio_format(profile);
+						// Calculate frame count
+						wrapper->num_frames = profile->chunks.wave_len / profile->block_align;
+						// Number of channels
+						wrapper->num_channels = profile->channels;
+						// Sample rate
+						wrapper->sample_rate = profile->samples_per_sec;
+						return MUAF_SUCCESS;
+					}
+
+			/* Writing audio data */
+
+				/* PCM audio writing */
+
+					// MUAF_FORMAT_PCM_U8
+					void muafWAVE_WritePCMU8(muafInner_File* file, muWAVEWrapper* wrapper, uint32_m beg_frame, uint32_m frame_len, uint8_m* data) {
+						// Write data over
+						muafInner_WriteToFile(file, wrapper->chunks.wave + (beg_frame * wrapper->num_channels), frame_len * wrapper->num_channels, data);
+					}
+
+					// MUAF_FORMAT_PCM_S16
+					void muafWAVE_WritePCMS16(muafInner_File* file, muWAVEWrapper* wrapper, uint32_m beg_frame, uint32_m frame_len, int16_m* data) {
+						// Convert each sample
+						uint32_m sample_count = frame_len * wrapper->num_channels;
+						for (uint32_m s = 0; s < sample_count; ++s) {
+							muByte sample_data[2];
+							MU_WLES16(sample_data, data[s]);
+							mu_memcpy(&data[s], sample_data, 2);
+						}
+
+						// Write data over
+						muafInner_WriteToFile(file, wrapper->chunks.wave + (beg_frame * 2 * wrapper->num_channels), frame_len * 2 * wrapper->num_channels, (muByte*)data);
+					}
+
+					// MUAF_FORMAT_PCM_S24
+					void muafWAVE_WritePCMS24(muafInner_File* file, muWAVEWrapper* wrapper, uint32_m beg_frame, uint32_m frame_len, int32_m* data) {
+						// Convert each sample
+						uint32_m sample_count = frame_len * wrapper->num_channels;
+						for (uint32_m s = 0; s < sample_count; ++s) {
+							muByte sample_data[3];
+							MU_WLES24(sample_data, data[s]);
+							mu_memcpy(((muByte*)data) + (s*3), sample_data, 3);
+						}
+
+						// Write data over
+						muafInner_WriteToFile(file, wrapper->chunks.wave + (beg_frame * 3 * wrapper->num_channels), frame_len * 3 * wrapper->num_channels, (muByte*)data);
+					}
+
+					// MUAF_FORMAT_PCM_S32
+					void muafWAVE_WritePCMS32(muafInner_File* file, muWAVEWrapper* wrapper, uint32_m beg_frame, uint32_m frame_len, int32_m* data) {
+						// Convert each sample
+						uint32_m sample_count = frame_len * wrapper->num_channels;
+						for (uint32_m s = 0; s < sample_count; ++s) {
+							muByte sample_data[4];
+							MU_WLES16(sample_data, data[s]);
+							mu_memcpy(&data[s], sample_data, 4);
+						}
+
+						// Write data over
+						muafInner_WriteToFile(file, wrapper->chunks.wave + (beg_frame * 4 * wrapper->num_channels), frame_len * 4 * wrapper->num_channels, (muByte*)data);
+					}
+
+					// MUAF_FORMAT_PCM_S64
+					void muafWAVE_WritePCMS64(muafInner_File* file, muWAVEWrapper* wrapper, uint32_m beg_frame, uint32_m frame_len, int64_m* data) {
+						// Convert each sample
+						uint32_m sample_count = frame_len * wrapper->num_channels;
+						for (uint32_m s = 0; s < sample_count; ++s) {
+							muByte sample_data[8];
+							MU_WLES16(sample_data, data[s]);
+							mu_memcpy(&data[s], sample_data, 8);
+						}
+
+						// Write data over
+						muafInner_WriteToFile(file, wrapper->chunks.wave + (beg_frame * 8 * wrapper->num_channels), frame_len * 8 * wrapper->num_channels, (muByte*)data);
+					}
+
+					// Writes WAVE PCM audio data
+					MUDEF muafResult mu_write_WAVE_PCM(const char* filename, muWAVEWrapper* wrapper, uint32_m beg_frame, uint32_m frame_len, void* data) {
+						// Open file
+						muafInner_File file;
+						if (muafInner_CreateFile(filename, &file, 0) != 0) {
+							return MUAF_FAILED_OPEN_FILE;
+						}
+
+						// Perform writing based on format
+						muafResult res = MUAF_SUCCESS;
+						switch (wrapper->audio_format) {
+							default: res = MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT; break;
+							case MUAF_FORMAT_PCM_U8:  muafWAVE_WritePCMU8 (&file, wrapper, beg_frame, frame_len, (uint8_m*)data); break;
+							case MUAF_FORMAT_PCM_S16: muafWAVE_WritePCMS16(&file, wrapper, beg_frame, frame_len, (int16_m*)data); break;
+							case MUAF_FORMAT_PCM_S24: muafWAVE_WritePCMS24(&file, wrapper, beg_frame, frame_len, (int32_m*)data); break;
+							case MUAF_FORMAT_PCM_S32: muafWAVE_WritePCMS32(&file, wrapper, beg_frame, frame_len, (int32_m*)data); break;
+							case MUAF_FORMAT_PCM_S64: muafWAVE_WritePCMS64(&file, wrapper, beg_frame, frame_len, (int64_m*)data); break;
+						}
+
+						// Close file and return
 						muafInner_DeloadFile(&file);
 						return res;
 					}
-
-					// Close file
-					muafInner_DeloadFile(&file);
-					return res;
-				}
-
-				// Destroys WAVE file wrapper
-				MUDEF void mu_free_WAVE_wrapper(muWAVEWrapper* wrapper) {
-					// Does nothing currently (sorry lol :P)
-					return; if (wrapper) {}
-				}
-
-				// Converts unspecific wrapper to WAVE wrapper
-				void muafWAVE_UnspecificWrapperToWAVE(muafUnspecificWrapper* unspecific, muWAVEWrapper* wave) {
-					wave->audio_format = unspecific->audio_format;
-					wave->num_frames = unspecific->num_frames;
-					wave->num_channels = unspecific->num_channels;
-					wave->sample_rate = unspecific->sample_rate;
-				}
-
-			/* PCM writing */
-
-				// MUAF_FORMAT_PCM_U8
-				void muafWAVE_write_FORMAT_PCM_U8(muafInner_File* file, muWAVEWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, uint8_m* data) {
-					// Write data over
-					muafInner_WriteToFile(file, wrapper->chunks.wave + (beg_frame * wrapper->num_channels), frame_len * wrapper->num_channels, data);
-				}
-
-				// MUAF_FORMAT_PCM_S16
-				void muafWAVE_write_FORMAT_PCM_S16(muafInner_File* file, muWAVEWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, int16_m* data) {
-					// Convert each sample
-					muafFrames sample_count = frame_len * wrapper->num_channels;
-					for (muafFrames s = 0; s < sample_count; ++s) {
-						muByte sample_data[2];
-						MU_WLES16(sample_data, data[s]);
-						mu_memcpy(&data[s], sample_data, 2);
-					}
-
-					// Write data over
-					muafInner_WriteToFile(file, wrapper->chunks.wave + (beg_frame * 2 * wrapper->num_channels), frame_len * 2 * wrapper->num_channels, (muByte*)data);
-				}
-
-				// MUAF_FORMAT_PCM_S32
-				void muafWAVE_write_FORMAT_PCM_S32(muafInner_File* file, muWAVEWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, int32_m* data) {
-					// Convert each sample
-					muafFrames sample_count = frame_len * wrapper->num_channels;
-					for (muafFrames s = 0; s < sample_count; ++s) {
-						muByte sample_data[4];
-						MU_WLES32(sample_data, data[s]);
-						mu_memcpy(&data[s], sample_data, 4);
-					}
-
-					// Write data over
-					muafInner_WriteToFile(file, wrapper->chunks.wave + (beg_frame * 4 * wrapper->num_channels), frame_len * 4 * wrapper->num_channels, (muByte*)data);
-				}
-
-				// MUAF_FORMAT_PCM_S64
-				void muafWAVE_write_FORMAT_PCM_S64(muafInner_File* file, muWAVEWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, int64_m* data) {
-					// Convert each sample
-					muafFrames sample_count = frame_len * wrapper->num_channels;
-					for (muafFrames s = 0; s < sample_count; ++s) {
-						muByte sample_data[8];
-						MU_WLES64(sample_data, data[s]);
-						mu_memcpy(&data[s], sample_data, 8);
-					}
-
-					// Write data over
-					muafInner_WriteToFile(file, wrapper->chunks.wave + (beg_frame * 8 * wrapper->num_channels), frame_len * 8 * wrapper->num_channels, (muByte*)data);
-				}
-
-			/* Audio writing */
-
-				// Writes uncompressed raw WAVE data given inner file
-				muafResult muafWAVE_WriteUncompressed(muafInner_File* file, muWAVEWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, void* data) {
-					// Perform writing based on format
-					switch (wrapper->audio_format) {
-						// Unknown
-						default: return MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT; break;
-						// WAVE PCM
-						case MUAF_FORMAT_PCM_U8:  muafWAVE_write_FORMAT_PCM_U8 (file, wrapper, beg_frame, frame_len, (uint8_m*)data); break;
-						case MUAF_FORMAT_PCM_S16: muafWAVE_write_FORMAT_PCM_S16(file, wrapper, beg_frame, frame_len, (int16_m*)data); break;
-						case MUAF_FORMAT_PCM_S32: muafWAVE_write_FORMAT_PCM_S32(file, wrapper, beg_frame, frame_len, (int32_m*)data); break;
-						case MUAF_FORMAT_PCM_S64: muafWAVE_write_FORMAT_PCM_S64(file, wrapper, beg_frame, frame_len, (int64_m*)data); break;
-					}
-
-					return MUAF_SUCCESS;
-				}
-
-				// Writes uncompressed raw WAVE data
-				MUDEF muafResult mu_write_WAVE_uncompressed(const char* filename, muWAVEWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, void* data) {
-					// Open file
-					muafInner_File file;
-					if (muafInner_CreateFile(filename, &file, 0) != 0) {
-						return MUAF_FAILED_CREATE_FILE;
-					}
-
-					// Perform writing
-					muafResult res = muafWAVE_WriteUncompressed(&file, wrapper, beg_frame, frame_len, data);
-
-					// Close file
-					muafInner_DeloadFile(&file);
-					return res;
-				}
-
-				// Retrieves WAVE wrapper equivalent from existing file
-				MUDEF muafResult mu_get_WAVE_wrapper(muWAVEProfile* profile, muWAVEWrapper* wrapper) {
-					// Get audio format
-					wrapper->audio_format = mu_WAVE_unspecific_audio_format(profile->format_tag, profile->specific_fields);
-					// Calculate frame count
-					wrapper->num_frames = profile->chunks.wave_len / profile->block_align;
-					// Number of channels
-					wrapper->num_channels = profile->channels;
-					// Sample rate
-					wrapper->sample_rate = profile->samples_per_sec;
-					return MUAF_SUCCESS;
-				}
-
-				// Retrieves unspecific wrapper from WAVE file
-				void muafWAVE_GetUnspecificWrapper(muWAVEProfile* profile, muafUnspecificWrapper* wrapper) {
-					wrapper->num_frames = profile->chunks.wave_len / profile->block_align;
-					wrapper->sample_rate = profile->samples_per_sec;
-					wrapper->num_channels = profile->channels;
-					wrapper->audio_format = mu_WAVE_unspecific_audio_format(profile->format_tag, profile->specific_fields);
-					wrapper->file_format = MUAF_WAVE;
-				}
-
-		/* WAVE format-unspecific */
-
-			// WAVE equivalent of mu_free_audio_file_profile
-			void muafWAVE_FreeAudioFileProfile(muafUnspecificProfile* profile) {
-				// If WAVE profile exists:
-				if (profile->specific.WAVE) {
-					// Destroy it
-					mu_free_WAVE_profile(profile->specific.WAVE);
-					// And then free it
-					mu_free(profile->specific.WAVE);
-				}
-			}
-
-			// WAVE equivalent of mu_get_audio_file_profile
-			muafResult muafWAVE_GetAudioFileProfile(muafInner_File* file, muafUnspecificProfile* profile) {
-				// Allocate WAVE profile
-				profile->specific.WAVE = (muWAVEProfile*)mu_malloc(sizeof(muWAVEProfile));
-				if (!profile->specific.WAVE) {
-					return MUAF_FAILED_MALLOC;
-				}
-
-				// Get WAVE profile
-				muafResult res = muafWAVE_GetWAVEProfile(file, profile->specific.WAVE);
-				if (muaf_result_is_fatal(res)) {
-					muafWAVE_FreeAudioFileProfile(profile);
-					return res;
-				}
-
-				// Get frame count
-				profile->num_frames = profile->specific.WAVE->chunks.wave_len / profile->specific.WAVE->block_align;
-				// Get sample rate
-				profile->sample_rate = profile->specific.WAVE->samples_per_sec;
-				// Get channel count
-				profile->num_channels = profile->specific.WAVE->channels;
-				// Get audio format
-				profile->audio_format = mu_WAVE_unspecific_audio_format(profile->specific.WAVE->format_tag, profile->specific.WAVE->specific_fields);
-				// Set file format
-				profile->file_format = MUAF_WAVE;
-
-				return res;
-			}
 
 	/* FLAC */
 
-		// @TODO Confirm frame values
+		/* Enum/Misc. functions */
 
-		/* Profiling */
-
-			// Checks if given data even is FLAC or not
+			// Returns whether or not given file is FLAC
 			muBool muafFLAC_IsFLAC(muafInner_File* file) {
 				// Minimum length check
 				// Includes fLaC (4) and entire streaminfo metadata block (4 byte header + 34 descriptive bytes)
@@ -2446,7 +2379,6 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				if (MU_RBEU32(data) != 0x664C6143) {
 					return MU_FALSE;
 				}
-
 				// Check for first metadata block being streaminfo
 				if ((data[4] & 0x7F) != 0) {
 					return MU_FALSE;
@@ -2455,6 +2387,23 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				// Has fLaC and streaminfo metadata block, so likely FLAC.
 				return MU_TRUE;
 			}
+
+			// Returns FLAC support for given audio formats
+			muBool muafFLAC_FormatSupport(muafAudioFormat format) {
+				// Perform based on audio format
+				switch (format) {
+					// Unknown
+					default: return MU_FALSE; break;
+
+					// Supported PCM
+					case MUAF_FORMAT_PCM_S8:  case MUAF_FORMAT_PCM_S16:
+					case MUAF_FORMAT_PCM_S24: case MUAF_FORMAT_PCM_S32:
+						return MU_TRUE;
+					break;
+				}
+			}
+
+		/* Profiling */
 
 			// Reads information from the streaminfo metadata block
 			// Streaminfo's existence and its min. length should already be confirmed (muafFLAC_IsFLAC)
@@ -2500,21 +2449,12 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				// Interpret sample rate
 				profile->contains_audio = profile->sample_rate != 0;
 
-				// Read and confirm number of channels (b=16, o=4, l=3)
-				profile->num_channels = (*(data+16) & 0xE) >> 0x1;
-				if (profile->num_channels++ == 0) {
-					return MUAF_INVALID_FLAC_STREAMINFO_NUM_CHANNELS;
-				}
-				if (profile->contains_audio && profile->num_channels == 0) {
-					return MUAF_INVALID_FLAC_STREAMINFO_NUM_CHANNELS;
-				}
+				// Read number of channels (b=16, o=4, l=3)
+				profile->num_channels = ((*(data+16) & 0xE) >> 0x1) + 1;
 
 				// Read and confirm bits per sample (b=16, o=7, l=5)
-				profile->bits_per_sample = (MU_RBEU16(data+16) & 0x1F0) >> 4;
-				if (profile->bits_per_sample++ == 0) {
-					return MUAF_INVALID_FLAC_STREAMINFO_BITS_PER_SAMPLE;
-				}
-				if (profile->contains_audio && profile->bits_per_sample == 0) {
+				profile->bits_per_sample = ((MU_RBEU16(data+16) & 0x1F0) >> 4) + 1;
+				if (profile->bits_per_sample < 4) {
 					return MUAF_INVALID_FLAC_STREAMINFO_BITS_PER_SAMPLE;
 				}
 
@@ -2532,21 +2472,123 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				return MUAF_SUCCESS;
 			}
 
-			// Gets FLAC profile given inner file
-			muafResult muafFLAC_GetFLACProfile(muafInner_File* file, muFLACProfile* profile) {
-				// Make sure it's FLAC
-				if (!muafFLAC_IsFLAC(file)) {
-					return MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION;
+			// Returns if the given metadata block type has occurred before
+			muBool muafFLAC_HasMetadataBlockTypeOccurred(muFLACProfile* profile, uint8_m block_type) {
+				// Loop through each metadata block
+				for (size_m i = 0; i < profile->num_metadata_blocks; ++i) {
+					// If they match, return true
+					if (profile->metadata_blocks[i].block_type == block_type) {
+						return MU_TRUE;
+					}
 				}
-				// Zero-out profile memory
-				mu_memset(profile, 0, sizeof(muFLACProfile));
+				// No matches, return false
+				return MU_FALSE;
+			}
 
-				// Get streaminfo
-				muBool more;
-				muafResult res = muafFLAC_ProcessStreaminfo(file, profile, &more);
-				if (muaf_result_is_fatal(res)) {
-					mu_free_FLAC_profile(profile);
-					return res;
+			// Processes an individual metadata block
+			// Before calling, confirm:
+			// * there should be a metadata block at the given index.
+			// Fills in given metadata block
+			muafResult muafFLAC_ProcessMetadataBlock(muafInner_File* file, muFLACProfile* profile, muFLACMetadataBlock* block, size_m i, muBool* more) {
+				// Ensure length for header
+				if (file->len < i+4) {
+					return MUAF_INVALID_FLAC_METADATA_BLOCK_LENGTH;
+				}
+				// Read header
+				muByte header[4];
+				muafInner_LoadFromFile(file, i, 4, header);
+
+				// Indicate if there's more based on first bit
+				*more = (header[0] & 0x80) == 0;
+
+				// Identify and verify metadata block type
+				block->block_type = header[0] & 0x7F;
+				switch (block->block_type) {
+					default: break;
+
+					// Forbidden value
+					case 127: return MUAF_INVALID_FLAC_METADATA_BLOCK_TYPE; break;
+
+					// Duplicate streaminfo
+					case 0: return MUAF_INVALID_FLAC_DUPLICATE_STREAMINFO; break;
+
+					// Seek table
+					case MU_FLAC_METADATA_SEEK_TABLE: {
+						// Verify no duplicates
+						if (muafFLAC_HasMetadataBlockTypeOccurred(profile, block->block_type)) {
+							return MUAF_INVALID_FLAC_DUPLICATE_SEEK_TABLE;
+						}
+					} break;
+
+					// Vorbis comment
+					case MU_FLAC_METADATA_VORBIS_COMMENT: {
+						// Verify no duplicates
+						if (muafFLAC_HasMetadataBlockTypeOccurred(profile, block->block_type)) {
+							return MUAF_INVALID_FLAC_DUPLICATE_VORBIS_COMMENT;
+						}
+					} break;
+				}
+
+				// Read and verify block length
+				block->length = MU_RBEU24(header+1);
+				if (file->len < i+4 + ((size_m)block->length)) {
+					return MUAF_INVALID_FLAC_METADATA_BLOCK_LENGTH;
+				}
+				// Set block index
+				block->index = i + 4;
+
+				return MUAF_SUCCESS;
+			}
+
+			// Processes all metadata blocks
+			// Before calling, confirm:
+			// * there should be at least one metadata block after the initial streaminfo.
+			muafResult muafFLAC_ProcessMetadata(muafInner_File* file, muFLACProfile* profile) {
+				// Initialize allocated metadata block array
+				size_m alloc_len = 4;
+				profile->metadata_blocks = (muFLACMetadataBlock*)mu_malloc(sizeof(muFLACMetadataBlock) * alloc_len);
+				if (!profile->metadata_blocks) {
+					return MUAF_FAILED_MALLOC;
+				}
+
+				// Initialize file index at 42, right after streaminfo
+				size_m i = 42;
+				// Holder for if there's more metadata:
+				muBool more = MU_TRUE;
+				// Holder for result:
+				muafResult res = MUAF_SUCCESS;
+
+				// Loop through each metadata block
+				while (more) {
+					// If we've exceeded the allocated length, attempt to reallocate
+					// with double the amount from before
+					if (profile->num_metadata_blocks+1 > alloc_len) {
+						alloc_len *= 2;
+						muFLACMetadataBlock* new_blocks = (muFLACMetadataBlock*)mu_realloc(
+							profile->metadata_blocks,
+							sizeof(muFLACMetadataBlock) * alloc_len
+						);
+						if (new_blocks == 0) {
+							// (Gets freed, don't worry)
+							return MUAF_FAILED_REALLOC;
+						}
+						profile->metadata_blocks = new_blocks;
+					}
+
+					// Process this metadata block
+					res = muafFLAC_ProcessMetadataBlock(
+						file, profile,
+						&profile->metadata_blocks[profile->num_metadata_blocks],
+						i, &more
+					);
+					if (muaf_result_is_fatal(res)) {
+						return res;
+					}
+
+					// Increment index based on metadata block length (including header)
+					i += 4 + profile->metadata_blocks[profile->num_metadata_blocks].length;
+					// Increment metadata block length
+					++profile->num_metadata_blocks;
 				}
 
 				return res;
@@ -2560,23 +2602,49 @@ Overall, muaf is okay with files not strictly complying with the specification w
 					return MUAF_FAILED_OPEN_FILE;
 				}
 
-				// Get FLAC profile
-				muafResult res = muafFLAC_GetFLACProfile(&file, profile);
+				// Make sure it's FLAC
+				if (!muafFLAC_IsFLAC(&file)) {
+					muafInner_DeloadFile(&file);
+					return MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION;
+				}
+				// Zero-out profile memory
+				mu_memset(profile, 0, sizeof(muFLACProfile));
 
-				// Close file
+				// Get streaminfo
+				muBool more;
+				muafResult res = muafFLAC_ProcessStreaminfo(&file, profile, &more);
+				if (muaf_result_is_fatal(res)) {
+					muafInner_DeloadFile(&file);
+					mu_free_FLAC_profile(profile);
+					return res;
+				}
+
+				// If there's more metadata blocks after streaminfo, process them
+				if (more) {
+					res = muafFLAC_ProcessMetadata(&file, profile);
+					if (muaf_result_is_fatal(res)) {
+						muafInner_DeloadFile(&file);
+						mu_free_FLAC_profile(profile);
+						return res;
+					}
+				}
+
+				// Close file and return
 				muafInner_DeloadFile(&file);
 				return res;
 			}
 
 			// Frees FLAC profile
 			MUDEF void mu_free_FLAC_profile(muFLACProfile* profile) {
-				// Does nothing currently, sorry!
-				return; if (profile) {}
+				// Free metadata blocks if they exist
+				if (profile->metadata_blocks != 0) {
+					mu_free(profile->metadata_blocks);
+				}
 			}
 
-	/* Format-unspecific API */
+	/* Audio file format and audio formats */
 
-		// Get audio file format
+		// Retrieves audio file format from file
 		MUDEF muafFileFormat mu_audio_file_format(const char* filename) {
 			// Open file
 			muafInner_File file;
@@ -2593,51 +2661,22 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				format = MUAF_FLAC;
 			}
 
-			// Close file
+			// Close file and return format
 			muafInner_DeloadFile(&file);
 			return format;
 		}
 
-		// Get unspecific profile
-		MUDEF muafResult mu_get_audio_file_profile(const char* filename, muafUnspecificProfile* profile) {
-			// Open file
-			muafInner_File file;
-			if (muafInner_LoadFile(filename, &file) != 0) {
-				return MUAF_FAILED_OPEN_FILE;
-			}
-
+		// Returns audio format supported for a given audio file format
+		MUDEF muBool muaf_audio_format_supported(muafFileFormat file_format, muafAudioFormat audio_format) {
 			// Perform based on file format
-			muafResult res;
-			// - WAVE
-			if (muafWAVE_IsWAVE(&file)) {
-				res = muafWAVE_GetAudioFileProfile(&file, profile);
-			}
-			// - Unrecognized
-			else {
-				res = MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT;
-			}
-
-			// Close file
-			muafInner_DeloadFile(&file);
-			return res;
-		}
-
-		// Frees unspecific profile
-		MUDEF void mu_free_audio_file_profile(muafUnspecificProfile* profile) {
-			// Perform based on format
-			switch (profile->file_format) {
-				case MUAF_WAVE: muafWAVE_FreeAudioFileProfile(profile); break;
-			}
-		}
-
-		// Returns whether or not given audio format is compressed
-		MUDEF muBool muaf_audio_format_compressed(muafAudioFormat format) {
-			switch (format) {
+			switch (file_format) {
 				default: return MU_FALSE; break;
+				case MUAF_WAVE: return muafWAVE_FormatSupport(audio_format); break;
+				case MUAF_FLAC: return muafFLAC_FormatSupport(audio_format);
 			}
 		}
 
-		// Returns uncompressed audio format sample size
+		// Returns audio format sample size
 		MUDEF size_m muaf_audio_format_sample_size(muafAudioFormat format) {
 			// Perform based on format
 			switch (format) {
@@ -2645,123 +2684,16 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				default: return 0; break;
 
 				// PCM
-				case MUAF_FORMAT_PCM_U8 : return 1; break;
+				case MUAF_FORMAT_PCM_U8:  case MUAF_FORMAT_PCM_S8:  return 1; break;
 				case MUAF_FORMAT_PCM_S16: return 2; break;
-				case MUAF_FORMAT_PCM_S32: return 4; break;
+				case MUAF_FORMAT_PCM_S24: case MUAF_FORMAT_PCM_S32: return 4; break;
 				case MUAF_FORMAT_PCM_S64: return 8; break;
 			}
-		}
-
-		// Reads uncompressed raw data
-		MUDEF muafResult mu_read_uncompressed_audio_file(const char* filename, muafUnspecificProfile* profile, muafFrames beg_frame, muafFrames frame_len, void* data) {
-			// Open file
-			muafInner_File file;
-			if (muafInner_LoadFile(filename, &file) != 0) {
-				return MUAF_FAILED_OPEN_FILE;
-			}
-
-			// Perform based on file format
-			muafResult res;
-			switch (profile->file_format) {
-				default: res = MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT; break;
-				case MUAF_WAVE: res = muafWAVE_ReadUncompressed(&file, profile->specific.WAVE, profile->audio_format, beg_frame, frame_len, data); break;
-			}
-
-			// Close file
-			muafInner_DeloadFile(&file);
-			return res;
-		}
-
-		// Creates an audio file wrapper
-		MUDEF muafResult mu_create_audio_file_wrapper(const char* filename, muafUnspecificWrapper* wrapper) {
-			// Perform based on file format
-			switch (wrapper->file_format) {
-				// Unknown
-				default: return MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT; break;
-
-				// WAVE
-				case MUAF_WAVE: {
-					// Allocate WAVE wrapper
-					wrapper->specific.WAVE = (muWAVEWrapper*)mu_malloc(sizeof(muWAVEWrapper));
-					if (!wrapper->specific.WAVE) {
-						return MUAF_FAILED_MALLOC;
-					}
-					// Set WAVE wrapper equivalent
-					muafWAVE_UnspecificWrapperToWAVE(wrapper, wrapper->specific.WAVE);
-
-					// Create wrapper
-					muafResult res = mu_create_WAVE_wrapper(filename, wrapper->specific.WAVE);
-					if (muaf_result_is_fatal(res)) {
-						mu_free_audio_file_wrapper(wrapper);
-					}
-					return res;
-				} break;
-			}
-		}
-
-		// Frees an audio file wrapper
-		MUDEF void mu_free_audio_file_wrapper(muafUnspecificWrapper* wrapper) {
-			// Perform based on file format
-			switch (wrapper->file_format) {
-				// Unknown
-				default: break;
-
-				// WAVE
-				case MUAF_WAVE: {
-					// If it exists:
-					if (wrapper->specific.WAVE) {
-						// Destroy it
-						mu_free_WAVE_wrapper(wrapper->specific.WAVE);
-						// And free it
-						mu_free(wrapper->specific.WAVE);
-					}
-				} break;
-			}
-		}
-
-		// Writes uncompressed raw data
-		MUDEF muafResult mu_write_uncompressed_audio_file(const char* filename, muafUnspecificWrapper* wrapper, muafFrames beg_frame, muafFrames frame_len, void* data) {
-			// Perform based on file format
-			switch (wrapper->file_format) {
-				default: return MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT; break;
-				case MUAF_WAVE: return mu_write_WAVE_uncompressed(filename, wrapper->specific.WAVE, beg_frame, frame_len, data); break;
-			}
-		}
-
-		// Gets wrapper from audio file
-		MUDEF muafResult mu_get_audio_file_wrapper(muafUnspecificProfile* profile, muafUnspecificWrapper* wrapper) {
-			// Perform based on file format
-			switch (profile->file_format) {
-				default: return MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT; break;
-				case MUAF_WAVE: muafWAVE_GetUnspecificWrapper(profile->specific.WAVE, wrapper); break;
-			}
-
-			return MUAF_SUCCESS;
 		}
 
 	/* Names */
 
 		#ifdef MUAF_NAMES
-
-		MUDEF const char* muaf_audio_format_get_name(muafAudioFormat format) {
-			switch (format) {
-				default: return "MUAF_FORMAT_UNKNOWN"; break;
-				case MUAF_FORMAT_PCM_U8: return "MUAF_FORMAT_PCM_U8"; break;
-				case MUAF_FORMAT_PCM_S16: return "MUAF_FORMAT_PCM_S16"; break;
-				case MUAF_FORMAT_PCM_S32: return "MUAF_FORMAT_PCM_S32"; break;
-				case MUAF_FORMAT_PCM_S64: return "MUAF_FORMAT_PCM_S64"; break;
-			}
-		}
-
-		MUDEF const char* muaf_audio_format_get_nice_name(muafAudioFormat format) {
-			switch (format) {
-				default: return "Unknown"; break;
-				case MUAF_FORMAT_PCM_U8: return "8-bit unsigned PCM"; break;
-				case MUAF_FORMAT_PCM_S16: return "16-bit signed PCM"; break;
-				case MUAF_FORMAT_PCM_S32: return "32-bit signed PCM"; break;
-				case MUAF_FORMAT_PCM_S64: return "64-bit signed PCM"; break;
-			}
-		}
 
 		MUDEF const char* muaf_audio_file_format_get_name(muafFileFormat format) {
 			switch (format) {
@@ -2779,10 +2711,27 @@ Overall, muaf is okay with files not strictly complying with the specification w
 			}
 		}
 
-		MUDEF const char* mu_WAVE_format_get_name(uint16_m format_tag) {
-			switch (format_tag) {
-				default: return "MU_UNKNOWN"; break;
-				case MU_WAVE_FORMAT_PCM: return "MU_WAVE_FORMAT_PCM"; break;
+		MUDEF const char* muaf_audio_format_get_name(muafAudioFormat format) {
+			switch (format) {
+				default: return "MUAF_FORMAT_UNKNOWN"; break;
+				case MUAF_FORMAT_PCM_U8: return "MUAF_FORMAT_PCM_U8"; break;
+				case MUAF_FORMAT_PCM_S8: return "MUAF_FORMAT_PCM_S8"; break;
+				case MUAF_FORMAT_PCM_S16: return "MUAF_FORMAT_PCM_S16"; break;
+				case MUAF_FORMAT_PCM_S24: return "MUAF_FORMAT_PCM_S24"; break;
+				case MUAF_FORMAT_PCM_S32: return "MUAF_FORMAT_PCM_S32"; break;
+				case MUAF_FORMAT_PCM_S64: return "MUAF_FORMAT_PCM_S64"; break;
+			}
+		}
+
+		MUDEF const char* muaf_audio_format_get_nice_name(muafAudioFormat format) {
+			switch (format) {
+				default: return "Unknown"; break;
+				case MUAF_FORMAT_PCM_U8: return "8-bit unsigned PCM"; break;
+				case MUAF_FORMAT_PCM_S8: return "8-bit signed PCM"; break;
+				case MUAF_FORMAT_PCM_S16: return "16-bit signed PCM"; break;
+				case MUAF_FORMAT_PCM_S24: return "24-bit signed PCM"; break;
+				case MUAF_FORMAT_PCM_S32: return "32-bit signed PCM"; break;
+				case MUAF_FORMAT_PCM_S64: return "64-bit signed PCM"; break;
 			}
 		}
 
@@ -2792,25 +2741,29 @@ Overall, muaf is okay with files not strictly complying with the specification w
 				case MUAF_SUCCESS: return "MUAF_SUCCESS"; break;
 				case MUAF_FAILED_MALLOC: return "MUAF_FAILED_MALLOC"; break;
 				case MUAF_FAILED_OPEN_FILE: return "MUAF_FAILED_OPEN_FILE"; break;
+				case MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION: return "MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION"; break;
 				case MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT: return "MUAF_FAILED_UNSUPPORTED_AUDIO_FORMAT"; break;
 				case MUAF_FAILED_CREATE_FILE: return "MUAF_FAILED_CREATE_FILE"; break;
-				case MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT: return "MUAF_FAILED_UNSUPPORTED_AUDIO_FILE_FORMAT"; break;
-				case MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION: return "MUAF_FAILED_AUDIO_FILE_FORMAT_IDENTIFICATION"; break;
+				case MUAF_FAILED_REALLOC: return "MUAF_FAILED_REALLOC"; break;
 				case MUAF_INVALID_WAVE_CHUNK_LENGTH_FOR_FILE: return "MUAF_INVALID_WAVE_CHUNK_LENGTH_FOR_FILE"; break;
 				case MUAF_INVALID_WAVE_MISSING_FMT: return "MUAF_INVALID_WAVE_MISSING_FMT"; break;
 				case MUAF_INVALID_WAVE_MISSING_WAVE_DATA: return "MUAF_INVALID_WAVE_MISSING_WAVE_DATA"; break;
 				case MUAF_INVALID_WAVE_FMT_LENGTH: return "MUAF_INVALID_WAVE_FMT_LENGTH"; break;
+				case MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE: return "MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE"; break;
 				case MUAF_INVALID_WAVE_FMT_CHANNELS: return "MUAF_INVALID_WAVE_FMT_CHANNELS"; break;
 				case MUAF_INVALID_WAVE_FMT_SAMPLES_PER_SEC: return "MUAF_INVALID_WAVE_FMT_SAMPLES_PER_SEC"; break;
-				case MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE: return "MUAF_INVALID_WAVE_FMT_PCM_BITS_PER_SAMPLE"; break;
 				case MUAF_INVALID_WAVE_FILE_WRITE_SIZE: return "MUAF_INVALID_WAVE_FILE_WRITE_SIZE"; break;
 				case MUAF_INVALID_FLAC_STREAMINFO_LENGTH: return "MUAF_INVALID_FLAC_STREAMINFO_LENGTH"; break;
 				case MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_RANGE: return "MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_RANGE"; break;
 				case MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_MIN_MAX: return "MUAF_INVALID_FLAC_STREAMINFO_BLOCK_SIZE_MIN_MAX"; break;
 				case MUAF_INVALID_FLAC_STREAMINFO_FRAME_SIZE_MIN_MAX: return "MUAF_INVALID_FLAC_STREAMINFO_FRAME_SIZE_MIN_MAX"; break;
-				case MUAF_INVALID_FLAC_STREAMINFO_NUM_CHANNELS: return "MUAF_INVALID_FLAC_STREAMINFO_NUM_CHANNELS"; break;
 				case MUAF_INVALID_FLAC_STREAMINFO_BITS_PER_SAMPLE: return "MUAF_INVALID_FLAC_STREAMINFO_BITS_PER_SAMPLE"; break;
 				case MUAF_INVALID_FLAC_STREAMINFO_SAMPLE_COUNT: return "MUAF_INVALID_FLAC_STREAMINFO_SAMPLE_COUNT"; break;
+				case MUAF_INVALID_FLAC_METADATA_BLOCK_LENGTH: return "MUAF_INVALID_FLAC_METADATA_BLOCK_LENGTH"; break;
+				case MUAF_INVALID_FLAC_METADATA_BLOCK_TYPE: return "MUAF_INVALID_FLAC_METADATA_BLOCK_TYPE"; break;
+				case MUAF_INVALID_FLAC_DUPLICATE_STREAMINFO: return "MUAF_INVALID_FLAC_DUPLICATE_STREAMINFO"; break;
+				case MUAF_INVALID_FLAC_DUPLICATE_SEEK_TABLE: return "MUAF_INVALID_FLAC_DUPLICATE_SEEK_TABLE"; break;
+				case MUAF_INVALID_FLAC_DUPLICATE_VORBIS_COMMENT: return "MUAF_INVALID_FLAC_DUPLICATE_VORBIS_COMMENT"; break;
 			}
 		}
 
@@ -2818,9 +2771,13 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 	/* Result */
 
+		// Returns if given result is fatal
 		MUDEF muBool muaf_result_is_fatal(muafResult result) {
+			// Perform based on result
 			switch (result) {
+				// Unknown
 				default: return MU_TRUE; break;
+
 				case MUAF_SUCCESS:
 					return MU_FALSE;
 				break;

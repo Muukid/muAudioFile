@@ -5,7 +5,7 @@
 DEMO NAME:          WAVE.c
 DEMO WRITTEN BY:    Muukid
 CREATION DATE:      2024-12-25
-LAST UPDATED:       2024-12-29
+LAST UPDATED:       2024-12-31
 
 ============================================================
                         DEMO PURPOSE
@@ -94,11 +94,11 @@ int main(void)
 
 	// Print WAVE profile basic fmt info
 	printf("\n== Basic fmt info ==\n");
-	printf("Format tag \t- %" PRIu16 " (%s)\n", profile.format_tag, mu_WAVE_format_get_name(profile.format_tag));
-	printf("Channels \t- %" PRIu16 "\n", profile.channels);
-	printf("Samples per sec \t- %" PRIu32 "Hz\n", profile.samples_per_sec);
-	printf("Avg. bytes per sec \t- %" PRIu32 "\n", profile.avg_bytes_per_sec);
-	printf("Block align \t- %" PRIu16 "\n", profile.block_align);
+	printf("Format tag         - %" PRIu16 "\n",   profile.format_tag);
+	printf("Channels           - %" PRIu16 "\n",   profile.channels);
+	printf("Samples per sec    - %" PRIu32 "Hz\n", profile.samples_per_sec);
+	printf("Avg. bytes per sec - %" PRIu32 "\n",   profile.avg_bytes_per_sec);
+	printf("Block align        - %" PRIu16 "\n",   profile.block_align);
 
 	// Print WAVE format specific fields
 	printf("\n== WAVE format specific fields ==\n");
@@ -114,7 +114,7 @@ int main(void)
 	printf("\n== Write info ==\n");
 
 	// Get unspecific audio format
-	muafAudioFormat audio_format = mu_WAVE_unspecific_audio_format(profile.format_tag, profile.specific_fields);
+	muafAudioFormat audio_format = mu_get_WAVE_audio_format(&profile);
 	printf("muaf format - %s\n", muaf_audio_format_get_name(audio_format));
 	// Return if unsupported
 	if (audio_format == MUAF_FORMAT_UNKNOWN) {
@@ -126,7 +126,7 @@ int main(void)
 	// Get WAVE wrapper based on this file
 	printf("Getting wrapper...\n");
 	muWAVEWrapper wrapper;
-	res = mu_get_WAVE_wrapper(&profile, &wrapper);
+	res = mu_get_WAVE_wrapper_from_WAVE(&profile, &wrapper);
 	if (res != MUAF_SUCCESS) {
 		printf("Non-successful result - %s", muaf_result_get_name(res));
 		if (muaf_result_is_fatal(res)) {
@@ -152,24 +152,20 @@ int main(void)
 
 	// Extract audio data from file
 	printf("Extracting audio data...\n");
-	muByte* audio_data; // (Holder for decompressed data)
-	size_m frame_size; // (Holder for frame size)
-	// - Uncompressed
-	if (!muaf_audio_format_compressed(audio_format)) {
-		// Calculate frame size
-		frame_size = muaf_audio_format_sample_size(audio_format) * ((size_m)profile.channels);
+	// Allocate audio data
+	size_m frame_size = muaf_audio_format_sample_size(audio_format) * ((size_m)profile.channels);
+	muByte* audio_data = (muByte*)malloc(frame_size * ((size_m)wrapper.num_frames));
+	if (!audio_data) {
+		printf("Failed to allocate data; exiting\n");
+		mu_free_WAVE_wrapper(&wrapper);
+		mu_free_WAVE_profile(&profile);
+		return -1;
+	}
 
-		// Allocate data
-		audio_data = (muByte*)malloc(frame_size * ((size_m)wrapper.num_frames));
-		if (!audio_data) {
-			printf("Failed to allocate data; exiting\n");
-			mu_free_WAVE_wrapper(&wrapper);
-			mu_free_WAVE_profile(&profile);
-			return -1;
-		}
-
+	// PCM handling
+	if (MUAF_FORMAT_IS_PCM(audio_format)) {
 		// Read frames
-		res = mu_read_WAVE_uncompressed("resources/test.wav", &profile, 0, wrapper.num_frames, audio_data);
+		res = mu_read_WAVE_PCM("resources/test.wav", &profile, 0, wrapper.num_frames, audio_data);
 		if (res != MUAF_SUCCESS) {
 			printf("Non-successful result - %s", muaf_result_get_name(res));
 			if (muaf_result_is_fatal(res)) {
@@ -182,9 +178,10 @@ int main(void)
 			printf("\n");
 		}
 	}
-	// - Compressed
+	// Non-handled
 	else {
-		printf("Compressed audio format unsupported in this demo; exiting\n");
+		printf("Audio format unsupported in this demo; exiting\n");
+		free(audio_data);
 		mu_free_WAVE_wrapper(&wrapper);
 		mu_free_WAVE_profile(&profile);
 		return -1;
@@ -204,10 +201,10 @@ int main(void)
 	}
 
 	// Loop through half of frames
-	muafFrames num_frames = wrapper.num_frames / 2;
-	for (muafFrames f = 0; f < num_frames; ++f) {
+	uint32_m num_frames = wrapper.num_frames / 2;
+	for (uint32_m f = 0; f < num_frames; ++f) {
 		// Reverse equivalent frame index:
-		muafFrames fi = wrapper.num_frames - f - 1;
+		uint32_m fi = wrapper.num_frames - f - 1;
 
 		// Get current frame
 		memcpy(frame, &audio_data[f*frame_size], frame_size);
@@ -222,10 +219,10 @@ int main(void)
 
 	// Write audio data to new file
 	printf("Copying audio data to 'output/test_out.wav'...\n");
-	// - Uncompressed
-	if (!muaf_audio_format_compressed(audio_format)) {
-		// Write uncompressed audio data
-		res = mu_write_WAVE_uncompressed("output/test_out.wav", &wrapper, 0, wrapper.num_frames, audio_data);
+	// PCM handling
+	if (MUAF_FORMAT_IS_PCM(audio_format)) {
+		// Write frames
+		res = mu_write_WAVE_PCM("output/test_out.wav", &wrapper, 0, wrapper.num_frames, audio_data);
 		if (res != MUAF_SUCCESS) {
 			printf("Non-successful result - %s", muaf_result_get_name(res));
 			if (muaf_result_is_fatal(res)) {
@@ -240,7 +237,7 @@ int main(void)
 	}
 	// - Compressed
 	else {
-		printf("Compressed audio format unsupported in this demo; exiting\n");
+		printf("Audio format unsupported in this demo; exiting\n");
 		free(audio_data);
 		mu_free_WAVE_wrapper(&wrapper);
 		mu_free_WAVE_profile(&profile);

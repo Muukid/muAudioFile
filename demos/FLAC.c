@@ -5,7 +5,7 @@
 DEMO NAME:          FLAC.c
 DEMO WRITTEN BY:    Muukid
 CREATION DATE:      2024-12-30
-LAST UPDATED:       2024-12-30
+LAST UPDATED:       2024-12-31
 
 ============================================================
                         DEMO PURPOSE
@@ -69,16 +69,27 @@ int main(void)
 
 	// Print chunk info
 	printf("\n== Chunk info ==\n");
-	printf("min_block_size   - %" PRIu16 "\n", profile.min_block_size);
-	printf("max_block_size   - %" PRIu16 "\n", profile.max_block_size);
-	printf("min_frame_size   - %" PRIu32 "\n", profile.min_frame_size);
-	printf("max_frame_size   - %" PRIu32 "\n", profile.max_frame_size);
-	printf("sample_rate      - %" PRIu32 "\n", profile.sample_rate);
-	printf("num_channels     - %" PRIu8  "\n", profile.num_channels);
-	printf("bits_per_sample  - %" PRIu8  "\n", profile.bits_per_sample);
-	printf("num_samples      - %" PRIu64 "\n", profile.num_samples);
-	printf("low_checksum     - %" PRIu64 "\n", profile.low_checksum);
-	printf("high_checksum    - %" PRIu64 "\n", profile.high_checksum);
+	printf("min_block_size  - %" PRIu16 "\n", profile.min_block_size);
+	printf("max_block_size  - %" PRIu16 "\n", profile.max_block_size);
+	printf("min_frame_size  - %" PRIu32 "\n", profile.min_frame_size);
+	printf("max_frame_size  - %" PRIu32 "\n", profile.max_frame_size);
+	printf("sample_rate     - %" PRIu32 "\n", profile.sample_rate);
+	printf("num_channels    - %" PRIu8  "\n", profile.num_channels);
+	printf("bits_per_sample - %" PRIu8  "\n", profile.bits_per_sample);
+	printf("num_samples     - %" PRIu64 "\n", profile.num_samples);
+	printf("low_checksum    - %" PRIu64 "\n", profile.low_checksum);
+	printf("high_checksum   - %" PRIu64 "\n", profile.high_checksum);
+
+	// Print metadata block info
+	printf("\n== Metadata block info ==\n");
+	printf("Metadata block count - %zu\n", profile.num_metadata_blocks);
+	for (size_m b = 0; b < profile.num_metadata_blocks; ++b) {
+		printf("#%zu\t - type %" PRIu8 ",\t length %" PRIu32 ",\t index %zu\n", b,
+			profile.metadata_blocks[b].block_type,
+			profile.metadata_blocks[b].length,
+			profile.metadata_blocks[b].index
+		);
+	}
 
 	// Free FLAC profile
 	mu_free_FLAC_profile(&profile);
