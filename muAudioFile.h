@@ -1161,6 +1161,10 @@ Overall, muaf is okay with files not strictly complying with the specification w
 
 	// @DOCLINE # FLAC API
 
+		// @DOCLINE This section describes muaf's API for the [Free Lossless Audio Codec](https://en.wikipedia.org/wiki/FLAC), or FLAC. The code for this API is built based off of [the RFC 9639 specification](https://datatracker.ietf.org/doc/rfc9639/), and this section of muaf's documentation will reference concepts that are defined in this specification. Any quotes referenced in this section are from RFC 9639 unless it is stated otherwise.
+
+		// @DOCLINE All values provided by the FLAC API by retrieving information from a FLAC audio file are checked and strictly guaranteed to be values permitted by the specification unless it is stated otherwise. These limitations are also strictly followed when encoding with no exceptions.
+
 		// @DOCLINE ## FLAC profile
 
 			typedef struct muFLACProfile muFLACProfile;

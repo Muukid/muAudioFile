@@ -391,6 +391,10 @@ muaf does not currently support wave-data that's provided in the form of a LIST.
 
 # FLAC API
 
+This section describes muaf's API for the [Free Lossless Audio Codec](https://en.wikipedia.org/wiki/FLAC), or FLAC. The code for this API is built based off of [the RFC 9639 specification](https://datatracker.ietf.org/doc/rfc9639/), and this section of muaf's documentation will reference concepts that are defined in this specification. Any quotes referenced in this section are from RFC 9639 unless it is stated otherwise.
+
+All values provided by the FLAC API by retrieving information from a FLAC audio file are checked and strictly guaranteed to be values permitted by the specification unless it is stated otherwise. These limitations are also strictly followed when encoding with no exceptions.
+
 ## FLAC profile
 
 A FLAC file's profile can be retrieved with the function `mu_get_FLAC_profile`, defined below: 
